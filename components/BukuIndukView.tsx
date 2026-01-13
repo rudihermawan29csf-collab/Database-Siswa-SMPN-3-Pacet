@@ -274,13 +274,13 @@ const BukuIndukView: React.FC<BukuIndukViewProps> = ({ students }) => {
                               <div className="w-1/2 px-1.5 py-0.5 bg-gray-50 border-r border-gray-300 text-[8px] flex items-center">22. Jarak Ke Sekolah</div>
                               <div className="w-20 px-1.5 py-0.5 text-[9px] font-bold flex items-center justify-center bg-gray-200">{selectedStudent.dapodik.distanceToSchool}</div>
                               <div className="w-10 px-1.5 py-0.5 border-r border-gray-300 text-[9px] flex items-center">km</div>
-                              <div className="flex-1 px-1.5 py-0.5 text-[8px] italic flex items-center leading-tight">2) > 1km sebutkan: {Number(selectedStudent.dapodik.distanceToSchool) > 1 ? selectedStudent.dapodik.distanceToSchool : '-'} Km</div>
+                              <div className="flex-1 px-1.5 py-0.5 text-[8px] italic flex items-center leading-tight">2) &gt; 1km sebutkan: {Number(selectedStudent.dapodik.distanceToSchool) > 1 ? selectedStudent.dapodik.distanceToSchool : '-'} Km</div>
                           </div>
                           <div className="flex border-b border-gray-300 h-6">
                               <div className="w-1/2 px-1.5 py-0.5 bg-gray-50 border-r border-gray-300 text-[8px] flex items-center">23. Waktu Tempuh</div>
                               <div className="w-20 px-1.5 py-0.5 text-[9px] font-bold flex items-center justify-center bg-gray-200">5</div>
                               <div className="w-12 px-1.5 py-0.5 border-r border-gray-300 text-[9px] flex items-center">menit</div>
-                              <div className="flex-1 px-1.5 py-0.5 text-[8px] italic flex items-center leading-tight">2) > 60 menit: - Menit</div>
+                              <div className="flex-1 px-1.5 py-0.5 text-[8px] italic flex items-center leading-tight">2) &gt; 60 menit: - Menit</div>
                           </div>
                           <div className="flex h-5">
                               <div className="w-1/2 px-1.5 py-0.5 bg-gray-50 border-r border-gray-300 text-[9px] flex items-center">24. Jml Saudara Kandung</div>
