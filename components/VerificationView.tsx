@@ -8,11 +8,21 @@ import {
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist';
 
-const pdfjs = pdfjsLib.default ? pdfjsLib.default : pdfjsLib;
+// Init PDF Worker safely
+const initPdfWorker = () => {
+    try {
+        const pdfjs = pdfjsLib.default ? pdfjsLib.default : pdfjsLib;
+        if (pdfjs && !pdfjs.GlobalWorkerOptions.workerSrc) {
+            pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+        }
+        return pdfjs;
+    } catch (e) {
+        console.error("Failed to initialize PDF Worker", e);
+        return null;
+    }
+};
 
-if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-}
+const pdfjs = initPdfWorker();
 
 interface VerificationViewProps {
   students: Student[];
@@ -112,6 +122,11 @@ const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStu
         setIsPdfLoading(false);
         if (!currentStudent || !currentDoc) return;
         if (currentDoc.type === 'PDF' || currentDoc.name.toLowerCase().endsWith('.pdf')) {
+            if (!pdfjs) {
+                console.error("PDF.js not initialized");
+                setPdfError(true);
+                return;
+            }
             setIsPdfLoading(true);
             try {
                 const loadingTask = pdfjs.getDocument(currentDoc.url);

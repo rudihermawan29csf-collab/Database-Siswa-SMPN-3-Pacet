@@ -6,10 +6,21 @@ import FileManager from './FileManager';
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist';
 
-const pdfjs = pdfjsLib.default ? pdfjsLib.default : pdfjsLib;
-if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-}
+// Init PDF Worker safely
+const initPdfWorker = () => {
+    try {
+        const pdfjs = pdfjsLib.default ? pdfjsLib.default : pdfjsLib;
+        if (pdfjs && !pdfjs.GlobalWorkerOptions.workerSrc) {
+            pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+        }
+        return pdfjs;
+    } catch (e) {
+        console.error("Failed to initialize PDF Worker", e);
+        return null;
+    }
+};
+
+const pdfjs = initPdfWorker();
 
 interface StudentDetailProps {
   student: Student;
@@ -125,6 +136,10 @@ const StudentDetail: React.FC<StudentDetailProps> = ({ student, onBack, viewMode
           setPdfDoc(null);
           setNumPages(0);
           if (evidenceViewer?.type === 'PDF') {
+              if (!pdfjs) {
+                  console.error("PDF.js not initialized");
+                  return;
+              }
               setIsPdfLoading(true);
               try {
                   const loadingTask = pdfjs.getDocument(evidenceViewer.url);
