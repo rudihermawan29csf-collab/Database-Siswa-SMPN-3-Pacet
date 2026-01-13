@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SiData SMPN 3 Pacet</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+            },
+            colors: {
+              mac: {
+                bg: '#F0F2F5', // Slightly darker than white for contrast
+                surface: '#FFFFFF',
+                sidebar: 'rgba(245, 245, 247, 0.75)', // Glassy
+                accent: '#007AFF', // Apple System Blue
+                accentHover: '#0062CC',
+                text: '#1D1D1F',
+                subtext: '#86868B',
+                border: '#E5E5EA',
+                success: '#34C759',
+                warning: '#FF9500',
+                danger: '#FF3B30'
+              }
+            },
+            boxShadow: {
+              'mac-sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+              'mac-md': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+              'mac-lg': '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025)',
+              'mac-xl': '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02)',
+              'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+            },
+            backdropBlur: {
+              'xs': '2px',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Custom Scrollbar for macOS feel */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #C1C1C5;
+        border-radius: 4px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #A8A8AD;
+      }
+      body {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-grayscale;
+        background-color: #F0F2F5; /* Fallback */
+      }
+      
+      .glass-panel {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+      }
+
+      .glass-sidebar {
+        background: rgba(240, 240, 245, 0.6);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        border-right: 1px solid rgba(0, 0, 0, 0.05);
+      }
+
+      /* Basic Print Styles - Fallback */
+      @media print {
+        @page { size: A4 portrait; margin: 0; }
+        body { background: white; }
+        .no-print { display: none !important; }
+        #root { overflow: visible !important; }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "pdfjs-dist": "https://esm.sh/pdfjs-dist@3.11.174"
+  }
+}
+</script>
+</head>
+  <body class="bg-mac-bg text-mac-text overflow-hidden h-screen selection:bg-mac-accent selection:text-white">
+    <div id="root"></div>
+  </body>
+</html>
