@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Save, School, Calendar, Users, Lock, Check } from 'lucide-react';
+import { Save, School, Calendar, Users, Lock, Check, UploadCloud, Loader2 } from 'lucide-react';
+import { api } from '../services/api';
+import { MOCK_STUDENTS } from '../services/mockData';
 
 const SettingsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'IDENTITY' | 'ACADEMIC' | 'USERS'>('IDENTITY');
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Mock Data
   const [schoolData, setSchoolData] = useState({
@@ -23,6 +26,17 @@ const SettingsView: React.FC = () => {
       alert("Pengaturan berhasil disimpan.");
   };
 
+  const handleInitialSync = async () => {
+      if(!window.confirm("Ini akan menimpa data di Google Sheets dengan Data Mockup lokal. Lanjutkan?")) return;
+      
+      setIsSyncing(true);
+      const success = await api.syncInitialData(MOCK_STUDENTS);
+      setIsSyncing(false);
+      
+      if (success) alert("Sinkronisasi Berhasil!");
+      else alert("Sinkronisasi Gagal. Cek Console.");
+  };
+
   const TabButton = ({ id, label, icon: Icon }: any) => (
       <button 
         onClick={() => setActiveTab(id)}
@@ -37,9 +51,19 @@ const SettingsView: React.FC = () => {
     <div className="flex flex-col h-full animate-fade-in space-y-4">
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
             <h2 className="text-lg font-bold text-gray-800">Pengaturan Sistem</h2>
-            <button onClick={handleSave} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-transform active:scale-95">
-                <Save className="w-4 h-4 mr-2" /> Simpan Perubahan
-            </button>
+            <div className="flex gap-2">
+                <button 
+                    onClick={handleInitialSync} 
+                    disabled={isSyncing}
+                    className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                >
+                    {isSyncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UploadCloud className="w-4 h-4 mr-2" />}
+                    Sync Data Awal
+                </button>
+                <button onClick={handleSave} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm transition-transform active:scale-95">
+                    <Save className="w-4 h-4 mr-2" /> Simpan Perubahan
+                </button>
+            </div>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col flex-1">

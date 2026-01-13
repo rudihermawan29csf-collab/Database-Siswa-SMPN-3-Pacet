@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard, { DashboardNotification } from './components/Dashboard';
 import DapodikList from './components/DapodikList';
@@ -14,58 +14,103 @@ import UploadRaporView from './components/UploadRaporView';
 import GradeVerificationView from './components/GradeVerificationView';
 import ReportsView from './components/ReportsView';
 import Login from './components/Login';
-import { MOCK_STUDENTS } from './services/mockData';
+import { MOCK_STUDENTS } from './services/mockData'; // Keep as fallback/initial
+import { api } from './services/api'; // Import API
 import { Student, DocumentFile } from './types';
-import { Search, Bell, ChevronDown, LogOut, User } from 'lucide-react';
+import { Search, Bell, ChevronDown, LogOut, User, Loader2 } from 'lucide-react';
 
 type UserRole = 'ADMIN' | 'STUDENT';
 
 const App: React.FC = () => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [studentsData, setStudentsData] = useState<Student[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('ADMIN');
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   
   // Triggers & Navigation State
-  const [dataVersion, setDataVersion] = useState(0); // Trigger for re-rendering notifications
+  const [dataVersion, setDataVersion] = useState(0); 
   const [targetHighlightField, setTargetHighlightField] = useState<string | undefined>(undefined);
   const [targetHighlightDoc, setTargetHighlightDoc] = useState<string | undefined>(undefined);
-  const [targetVerificationStudentId, setTargetVerificationStudentId] = useState<string | undefined>(undefined); // For deep linking to VerificationView
+  const [targetVerificationStudentId, setTargetVerificationStudentId] = useState<string | undefined>(undefined); 
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  // FETCH DATA ON MOUNT
+  useEffect(() => {
+    const initData = async () => {
+        setIsLoading(true);
+        // Try fetch from online API
+        const onlineData = await api.getStudents();
+        if (onlineData && onlineData.length > 0) {
+            setStudentsData(onlineData);
+        } else {
+            console.log("Using Mock Data (API empty or failed)");
+            setStudentsData(MOCK_STUDENTS);
+        }
+        setIsLoading(false);
+    };
+    initData();
+  }, [dataVersion]);
 
   const refreshData = () => {
       setDataVersion(prev => prev + 1);
   };
 
-  const handleDocumentUpdate = (file: File, category: string) => {
+  // Sync back to Cloud whenever critical update happens (Optional: Optimistic UI)
+  const saveStudentToCloud = async (student: Student) => {
+      await api.updateStudent(student);
+      refreshData();
+  };
+
+  const handleDocumentUpdate = async (file: File, category: string) => {
     if (!selectedStudent) return;
     
-    // Logic similar to StudentDetail
+    // Optimistic Update UI
     let newDocs = category === 'LAINNYA' ? [...selectedStudent.documents] : selectedStudent.documents.filter(d => d.category !== category);
-    
-    const newDoc: DocumentFile = {
-        id: Math.random().toString(36).substr(2, 9),
+    const tempDoc: DocumentFile = {
+        id: 'temp-' + Math.random(),
         name: file.name,
         type: file.type.includes('pdf') ? 'PDF' : 'IMAGE',
         url: URL.createObjectURL(file), 
         category: category as any,
         uploadDate: new Date().toISOString().split('T')[0],
-        size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
-        status: 'PENDING',
-        adminNote: undefined
+        size: 'Uploading...',
+        status: 'PENDING'
     };
-    
-    selectedStudent.documents = [...newDocs, newDoc];
-    refreshData();
+    selectedStudent.documents = [...newDocs, tempDoc];
+    setStudentsData(prev => prev.map(s => s.id === selectedStudent.id ? selectedStudent : s));
+
+    // Upload to Google Drive via API
+    try {
+        const driveUrl = await api.uploadFile(file, selectedStudent.id, category);
+        if (driveUrl) {
+            // Update with real URL and Drive ID
+            const realDoc: DocumentFile = {
+                ...tempDoc,
+                id: Math.random().toString(36).substr(2, 9),
+                url: driveUrl, // Google Drive Link
+                size: `${(file.size / 1024 / 1024).toFixed(2)} MB`
+            };
+            selectedStudent.documents = [...newDocs, realDoc];
+            // Sync metadata to sheet
+            await saveStudentToCloud(selectedStudent);
+        }
+    } catch (e) {
+        alert("Gagal upload file ke Google Drive.");
+        // Revert
+        selectedStudent.documents = newDocs;
+        refreshData();
+    }
   };
 
   const handleDocumentDelete = (docId: string) => {
       if (!selectedStudent) return;
       if(window.confirm("Apakah Anda yakin ingin menghapus dokumen ini?")) {
         selectedStudent.documents = selectedStudent.documents.filter(d => d.id !== docId);
-        refreshData();
+        saveStudentToCloud(selectedStudent);
       }
   };
 
@@ -73,7 +118,7 @@ const App: React.FC = () => {
       const notifs: DashboardNotification[] = [];
 
       if (userRole === 'ADMIN') {
-          MOCK_STUDENTS.forEach(s => {
+          studentsData.forEach(s => {
               const pendingCorrections = s.correctionRequests?.filter(r => r.status === 'PENDING') || [];
               if (pendingCorrections.length > 0) {
                   notifs.push({
@@ -149,7 +194,6 @@ const App: React.FC = () => {
               }
           });
           
-          // Show Admin Messages
           selectedStudent.adminMessages?.forEach(msg => {
               notifs.push({
                   id: `msg-${msg.id}`,
@@ -163,7 +207,7 @@ const App: React.FC = () => {
       }
 
       return notifs;
-  }, [userRole, MOCK_STUDENTS, selectedStudent, dataVersion]);
+  }, [userRole, studentsData, selectedStudent, dataVersion]);
 
   const handleLogin = (role: UserRole, studentData?: Student) => {
       setUserRole(role);
@@ -190,12 +234,10 @@ const App: React.FC = () => {
       if (userRole === 'ADMIN') {
           if (notif.data?.student) {
               if (notif.type === 'ADMIN_VERIFY') {
-                   // Go to Student Detail for Data Correction
                    setSelectedStudent(notif.data.student);
                    setTargetHighlightField(notif.data.fieldKey);
                    setCurrentView('dapodik'); 
               } else if (notif.type === 'ADMIN_DOC_VERIFY') {
-                   // Go to Verification View for Documents
                    setTargetVerificationStudentId(notif.data.student.id);
                    setCurrentView('verification');
               }
@@ -213,11 +255,20 @@ const App: React.FC = () => {
       }
   };
 
+  if (isLoading) {
+      return (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F2F5]">
+              <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+              <h2 className="text-xl font-bold text-gray-700">Menghubungkan ke Database...</h2>
+              <p className="text-gray-500">Mohon tunggu sebentar.</p>
+          </div>
+      );
+  }
+
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
 
-  // Calculate Profile Image Source
   let profileImageSrc = `https://api.dicebear.com/7.x/avataaars/svg?seed=Admin`;
   if (userRole === 'STUDENT' && selectedStudent) {
       const uploadedPhoto = selectedStudent.documents.find(d => d.category === 'FOTO');
@@ -247,7 +298,7 @@ const App: React.FC = () => {
           readOnly={userRole === 'STUDENT'} 
           highlightFieldKey={targetHighlightField} 
           highlightDocumentId={undefined} 
-          onUpdate={refreshData}
+          onUpdate={() => saveStudentToCloud(selectedStudent)}
         />
       );
     }
@@ -273,22 +324,22 @@ const App: React.FC = () => {
     // Role-based views
     switch (currentView) {
     case 'dashboard':
-        return <Dashboard notifications={notifications} onNotificationClick={handleNotificationClick} userRole={userRole} students={MOCK_STUDENTS} />;
+        return <Dashboard notifications={notifications} onNotificationClick={handleNotificationClick} userRole={userRole} students={studentsData} />;
     case 'dapodik':
         return userRole === 'ADMIN' ? (
           <DapodikList 
-              students={MOCK_STUDENTS} 
+              students={studentsData} 
               onSelectStudent={(s) => setSelectedStudent(s)} 
           />
         ) : null;
     case 'database':
-        return <DatabaseView students={MOCK_STUDENTS} />;
+        return <DatabaseView students={studentsData} />;
     case 'buku-induk':
-        return <BukuIndukView students={MOCK_STUDENTS} />;
+        return <BukuIndukView students={studentsData} />;
     case 'grades':
         return (
             <GradesView 
-                students={MOCK_STUDENTS} 
+                students={studentsData} 
                 userRole={userRole} 
                 loggedInStudent={selectedStudent || undefined}
                 onUpdate={refreshData}
@@ -297,27 +348,26 @@ const App: React.FC = () => {
     case 'verification':
         return (
             <VerificationView 
-                students={MOCK_STUDENTS} 
+                students={studentsData} 
                 targetStudentId={targetVerificationStudentId}
                 onUpdate={refreshData}
             />
         );
     case 'history':
-         // Filter students/items inside HistoryView based on role
-         return <HistoryView students={userRole === 'STUDENT' && selectedStudent ? [selectedStudent] : MOCK_STUDENTS} />;
+         return <HistoryView students={userRole === 'STUDENT' && selectedStudent ? [selectedStudent] : studentsData} />;
     case 'reports':
         return (
             <ReportsView 
-                students={MOCK_STUDENTS} 
+                students={studentsData} 
                 onUpdate={refreshData}
             />
         );
     case 'settings':
         return <SettingsView />;
     case 'upload-rapor':
-        return selectedStudent ? <UploadRaporView student={selectedStudent} onUpdate={refreshData} /> : null;
+        return selectedStudent ? <UploadRaporView student={selectedStudent} onUpdate={() => saveStudentToCloud(selectedStudent)} /> : null;
     case 'grade-verification':
-        return <GradeVerificationView students={MOCK_STUDENTS} onUpdate={refreshData} />;
+        return <GradeVerificationView students={studentsData} onUpdate={refreshData} />;
     default:
         return <Dashboard />;
     }
@@ -325,7 +375,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#F0F2F5] font-sans text-gray-900 overflow-hidden selection:bg-blue-200">
-      {/* Abstract Background for Depth */}
       <div className="absolute inset-0 z-0 bg-gradient-to-br from-blue-50 to-indigo-50/50 pointer-events-none"></div>
       
       <Sidebar 
@@ -399,7 +448,6 @@ const App: React.FC = () => {
                             <ChevronDown className="w-4 h-4 text-gray-400" />
                         </div>
 
-                        {/* Dropdown Menu */}
                         {isProfileOpen && (
                             <>
                                 <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)}></div>
@@ -408,22 +456,10 @@ const App: React.FC = () => {
                                         <p className="text-sm font-bold text-gray-800">{userRole === 'ADMIN' ? 'Admin TU' : selectedStudent?.fullName}</p>
                                         <p className="text-xs text-gray-500">{userRole}</p>
                                     </div>
-                                    <button 
-                                        onClick={() => {
-                                            setIsProfileOpen(false);
-                                            // Optional: Navigate to profile
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                    >
+                                    <button onClick={() => setIsProfileOpen(false)} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                                         <User className="w-4 h-4" /> Profil
                                     </button>
-                                    <button 
-                                        onClick={() => {
-                                            setIsProfileOpen(false);
-                                            handleLogout();
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                    >
+                                    <button onClick={() => { setIsProfileOpen(false); handleLogout(); }} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
                                         <LogOut className="w-4 h-4" /> Keluar
                                     </button>
                                 </div>
