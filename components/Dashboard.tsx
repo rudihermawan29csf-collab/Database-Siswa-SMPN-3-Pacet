@@ -31,7 +31,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
       {subtext && <p className="text-xs text-gray-400 mt-1">{subtext}</p>}
     </div>
     <div className={`p-3 rounded-xl ${color} bg-opacity-10`}>
-      {React.cloneElement(icon as React.ReactElement, { className: `w-6 h-6 ${color.replace('bg-', 'text-')}` })}
+      {React.cloneElement(icon as React.ReactElement<any>, { className: `w-6 h-6 ${color.replace('bg-', 'text-')}` })}
     </div>
   </div>
 );

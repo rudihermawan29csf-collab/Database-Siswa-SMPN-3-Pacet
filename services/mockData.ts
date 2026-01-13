@@ -40,7 +40,6 @@ const createMockRecord = (semester: number, className: string): AcademicRecord =
   };
 };
 
-// RAW DATA FROM USER
 const RAW_DATA = `1	ABEL AULIYA PASA RAMADANI	1129	P	3101640834	MOJOKERTO	2010-08-12	3516035208100001	Islam	Mojokembang	7		Mojokembang	Mojokembang	Kec. Pacet	61374	Bersama orang tua	Ojek					Tidak		Hartono	1978	SMP / sederajat	Lainnya	Rp. 1,000,000 - Rp. 1,999,999	3516030401780003	RODIYAH	1991	SMP / sederajat	Tidak bekerja	Tidak Berpenghasilan	3516037012910001							Kelas IX A			Tidak		1		AL7060024640																
 2	ABHEL ECHA TRIOCTAVIA NATASYA	1130	P	0103501336	MOJOKERTO	2010-10-28	3516036810100001	Islam	DUSUN PARAS	5	4	PARAS	Kembangbelor	Kec. Pacet	61374	Bersama orang tua	Jalan kaki		085708676054			Tidak		AGUS SUPRIADI	1979	SMP / sederajat	Wiraswasta	Rp. 500,000 - Rp. 999,999	3516030108790004	SRI ERNANIK	1979	SMP / sederajat	Wiraswasta	Kurang dari Rp. 500,000	3516034802790001			Tidak sekolah				Kelas IX B			Tidak		0		8471/UM/2010/KAB.MR																
 3	ADINDA DWI PRASETYAWAN	1131	L	0101216265	MOJOKERTO	2010-07-08	3516030807100001	Islam	DUSUN KEMBANG	1	5	KEMBANG	Kembangbelor	Kec. Pacet	61374	Bersama orang tua	Ojek		083846421251			Tidak		SUMAJI	1979	SMP / sederajat	Karyawan Swasta	Rp. 500,000 - Rp. 999,999	3516031806790002	ERNA TRI LESTARI	1979	SMP / sederajat	Tidak bekerja	Tidak Berpenghasilan	3516037103790003			Tidak sekolah				Kelas IX C			Tidak		0		5958/UM/2010/KAB.MR																
@@ -136,11 +135,8 @@ const parseStudents = (): Student[] => {
     const lines = RAW_DATA.trim().split('\n');
     return lines.map((line, index) => {
         const cols = line.split('\t');
-        
-        // Safety check for columns to avoid undefined errors
         const safeCol = (idx: number) => cols[idx] ? cols[idx].trim() : '';
 
-        // Parsing logic mapping tab-separated columns to Student object
         const student: Student = {
             id: (index + 1).toString(),
             nis: safeCol(2),
@@ -153,14 +149,14 @@ const parseStudents = (): Student[] => {
             nationality: 'WNI',
             address: safeCol(9),
             subDistrict: safeCol(14),
-            district: 'Mojokerto', // Defaulted or parsed if available (seems inferred)
+            district: 'Mojokerto',
             postalCode: safeCol(15),
             childOrder: parseInt(safeCol(57)) || 1,
             siblingCount: parseInt(safeCol(64)) || 0,
             height: parseInt(safeCol(62)) || 0,
             weight: parseInt(safeCol(61)) || 0,
             bloodType: '-',
-            className: safeCol(42) || 'IX A', // Default to IX A if missing
+            className: safeCol(42) || 'IX A',
             entryYear: 2022,
             status: 'AKTIF',
             father: {
@@ -170,7 +166,7 @@ const parseStudents = (): Student[] => {
                 education: safeCol(26),
                 job: safeCol(27),
                 income: safeCol(28),
-                phone: safeCol(19) // HP
+                phone: safeCol(19)
             },
             mother: {
                 name: safeCol(30),
@@ -179,7 +175,7 @@ const parseStudents = (): Student[] => {
                 education: safeCol(32),
                 job: safeCol(33),
                 income: safeCol(34),
-                phone: safeCol(19) // HP Shared
+                phone: safeCol(19)
             },
             guardian: safeCol(36) ? {
                 name: safeCol(36),

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Student } from '../types';
+import { Student, DocumentFile, CorrectionRequest } from '../types';
 import { History, CheckCircle2, XCircle } from 'lucide-react';
 
 interface HistoryViewProps {
@@ -7,13 +7,21 @@ interface HistoryViewProps {
 }
 
 const HistoryView: React.FC<HistoryViewProps> = ({ students }) => {
+  // Helper to safely get date from either DocumentFile or CorrectionRequest
+  const getHistoryDate = (item: DocumentFile | CorrectionRequest): string | undefined => {
+      // 'verificationDate' exists on DocumentFile, 'processedDate' on CorrectionRequest
+      if ('verificationDate' in item) return item.verificationDate;
+      if ('processedDate' in item) return item.processedDate;
+      return undefined;
+  };
+
   // Derive History Items from data
   const historyItems = students.flatMap(s => [
-      ...s.documents.filter(d => d.status !== 'PENDING').map(d => ({ type: 'DOC', item: d, student: s })),
-      ...(s.correctionRequests || []).filter(r => r.status !== 'PENDING').map(r => ({ type: 'REQ', item: r, student: s }))
+      ...s.documents.filter(d => d.status !== 'PENDING').map(d => ({ type: 'DOC' as const, item: d, student: s })),
+      ...(s.correctionRequests || []).filter(r => r.status !== 'PENDING').map(r => ({ type: 'REQ' as const, item: r, student: s }))
   ]).sort((a, b) => {
-      const dateA = a.item.verificationDate || a.item.processedDate || '';
-      const dateB = b.item.verificationDate || b.item.processedDate || '';
+      const dateA = getHistoryDate(a.item) || '';
+      const dateB = getHistoryDate(b.item) || '';
       return dateB.localeCompare(dateA); // Newest first
   });
 
@@ -41,16 +49,20 @@ const HistoryView: React.FC<HistoryViewProps> = ({ students }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 text-sm">
-                            {historyItems.map((entry: any, idx) => (
+                            {historyItems.map((entry, idx) => (
                                 <tr key={idx} className="hover:bg-gray-50">
-                                    <td className="p-3 text-gray-500 font-mono text-xs">{entry.item.verificationDate || entry.item.processedDate || '-'}</td>
+                                    <td className="p-3 text-gray-500 font-mono text-xs">{getHistoryDate(entry.item) || '-'}</td>
                                     <td className="p-3 font-medium">{entry.student.fullName}</td>
                                     <td className="p-3">
                                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${entry.type === 'DOC' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
                                             {entry.type === 'DOC' ? 'DOKUMEN' : 'DATA'}
                                         </span>
                                     </td>
-                                    <td className="p-3 text-gray-700">{entry.type === 'DOC' ? entry.item.name : entry.item.fieldName}</td>
+                                    <td className="p-3 text-gray-700">
+                                        {entry.type === 'DOC' 
+                                            ? (entry.item as DocumentFile).name 
+                                            : (entry.item as CorrectionRequest).fieldName}
+                                    </td>
                                     <td className="p-3">
                                         <span className={`flex items-center gap-1 ${entry.item.status === 'APPROVED' ? 'text-green-600' : 'text-red-600'}`}>
                                             {entry.item.status === 'APPROVED' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}

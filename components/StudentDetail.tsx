@@ -3,25 +3,6 @@ import { ArrowLeft, User, Users, BookOpen, FolderOpen, Save, MapPin, Activity, W
 import { Student, DocumentFile, CorrectionRequest } from '../types';
 import FileManager from './FileManager';
 
-// @ts-ignore
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Init PDF Worker safely
-const initPdfWorker = () => {
-    try {
-        const pdfjs = pdfjsLib.default ? pdfjsLib.default : pdfjsLib;
-        if (pdfjs && !pdfjs.GlobalWorkerOptions.workerSrc) {
-            pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-        }
-        return pdfjs;
-    } catch (e) {
-        console.error("Failed to initialize PDF Worker", e);
-        return null;
-    }
-};
-
-const pdfjs = initPdfWorker();
-
 interface StudentDetailProps {
   student: Student;
   onBack: () => void;
@@ -136,12 +117,16 @@ const StudentDetail: React.FC<StudentDetailProps> = ({ student, onBack, viewMode
           setPdfDoc(null);
           setNumPages(0);
           if (evidenceViewer?.type === 'PDF') {
-              if (!pdfjs) {
-                  console.error("PDF.js not initialized");
-                  return;
-              }
               setIsPdfLoading(true);
               try {
+                  // Dynamic Import
+                  // @ts-ignore
+                  const pdfjsLib = await import('pdfjs-dist');
+                  const pdfjs = pdfjsLib.default ? pdfjsLib.default : pdfjsLib;
+                  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+                      pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+                  }
+
                   const loadingTask = pdfjs.getDocument(evidenceViewer.url);
                   const pdf = await loadingTask.promise;
                   setPdfDoc(pdf);
