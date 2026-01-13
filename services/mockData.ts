@@ -156,7 +156,8 @@ const parseStudents = (): Student[] => {
             height: parseInt(safeCol(62)) || 0,
             weight: parseInt(safeCol(61)) || 0,
             bloodType: '-',
-            className: safeCol(42) || 'IX A',
+            // CLEAN UP CLASS NAME
+            className: (safeCol(42) || 'IX A').replace('Kelas ', ''),
             entryYear: 2022,
             status: 'AKTIF',
             father: {
@@ -226,8 +227,8 @@ const parseStudents = (): Student[] => {
             documents: [],
             correctionRequests: [],
             academicRecords: {
-                 1: createMockRecord(1, safeCol(42)),
-                 2: createMockRecord(2, safeCol(42)),
+                 1: createMockRecord(1, safeCol(42).replace('Kelas ', '')),
+                 2: createMockRecord(2, safeCol(42).replace('Kelas ', '')),
             }
         };
         return student;

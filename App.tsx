@@ -16,7 +16,7 @@ import ReportsView from './components/ReportsView';
 import Login from './components/Login';
 import { MOCK_STUDENTS } from './services/mockData';
 import { Student, DocumentFile } from './types';
-import { Search, Bell, ChevronDown } from 'lucide-react';
+import { Search, Bell, ChevronDown, LogOut, User } from 'lucide-react';
 
 type UserRole = 'ADMIN' | 'STUDENT';
 
@@ -33,6 +33,7 @@ const App: React.FC = () => {
   const [targetVerificationStudentId, setTargetVerificationStudentId] = useState<string | undefined>(undefined); // For deep linking to VerificationView
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const refreshData = () => {
       setDataVersion(prev => prev + 1);
@@ -375,23 +376,59 @@ const App: React.FC = () => {
                         {notifications.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
                      </button>
                      
-                     <div className="flex items-center gap-3 pl-4 border-l border-gray-300/50 cursor-pointer hover:bg-gray-50 p-1 rounded-lg transition-colors group">
-                        <div className="text-right hidden sm:block">
-                            <p className="text-sm font-bold text-gray-800 group-hover:text-blue-600 transition-colors">
-                                {userRole === 'ADMIN' ? 'Admin TU' : selectedStudent?.fullName || 'Siswa'}
-                            </p>
-                            <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">
-                                {userRole === 'ADMIN' ? 'Operator' : 'Siswa'}
-                            </p>
+                     <div 
+                        className="relative"
+                        onClick={() => setIsProfileOpen(!isProfileOpen)}
+                     >
+                        <div className="flex items-center gap-3 pl-4 border-l border-gray-300/50 cursor-pointer hover:bg-gray-50 p-1 rounded-lg transition-colors group">
+                            <div className="text-right hidden sm:block">
+                                <p className="text-sm font-bold text-gray-800 group-hover:text-blue-600 transition-colors">
+                                    {userRole === 'ADMIN' ? 'Admin TU' : selectedStudent?.fullName || 'Siswa'}
+                                </p>
+                                <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">
+                                    {userRole === 'ADMIN' ? 'Operator' : 'Siswa'}
+                                </p>
+                            </div>
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 p-[2px] shadow-md">
+                                <img 
+                                    src={profileImageSrc} 
+                                    alt="Profile" 
+                                    className="w-full h-full rounded-full bg-white object-cover"
+                                />
+                            </div>
+                            <ChevronDown className="w-4 h-4 text-gray-400" />
                         </div>
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 p-[2px] shadow-md">
-                            <img 
-                                src={profileImageSrc} 
-                                alt="Profile" 
-                                className="w-full h-full rounded-full bg-white object-cover"
-                            />
-                        </div>
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
+
+                        {/* Dropdown Menu */}
+                        {isProfileOpen && (
+                            <>
+                                <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)}></div>
+                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50 animate-fade-in">
+                                    <div className="px-4 py-2 border-b border-gray-50 block sm:hidden">
+                                        <p className="text-sm font-bold text-gray-800">{userRole === 'ADMIN' ? 'Admin TU' : selectedStudent?.fullName}</p>
+                                        <p className="text-xs text-gray-500">{userRole}</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            setIsProfileOpen(false);
+                                            // Optional: Navigate to profile
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    >
+                                        <User className="w-4 h-4" /> Profil
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            setIsProfileOpen(false);
+                                            handleLogout();
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                    >
+                                        <LogOut className="w-4 h-4" /> Keluar
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>

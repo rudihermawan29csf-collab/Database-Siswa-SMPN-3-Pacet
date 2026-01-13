@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Student } from '../types';
-import { Search, FileSpreadsheet, Download, UploadCloud, Trash2, Save, Pencil, X, CheckCircle2, Loader2, LayoutList } from 'lucide-react';
+import { Student, AcademicRecord } from '../types';
+import { Search, FileSpreadsheet, Download, UploadCloud, Trash2, Save, Pencil, X, CheckCircle2, Loader2, LayoutList, ArrowLeft, Printer } from 'lucide-react';
 
 interface GradesViewProps {
   students: Student[];
@@ -16,6 +16,7 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
   const [searchTerm, setSearchTerm] = useState('');
   const [dbClassFilter, setDbClassFilter] = useState<string>('ALL');
   const [dbSemester, setDbSemester] = useState<number>(1);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [renderKey, setRenderKey] = useState(0); // Force re-render
 
   // Editing State
@@ -29,17 +30,17 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
   const [importStats, setImportStats] = useState<{ processed: number } | null>(null);
 
   const SUBJECT_MAP = [
-      { key: 'PAI', label: 'PAI' },
-      { key: 'Pendidikan Pancasila', label: 'PPKn' },
-      { key: 'Bahasa Indonesia', label: 'BIN' },
-      { key: 'Matematika', label: 'MTK' },
-      { key: 'IPA', label: 'IPA' },
-      { key: 'IPS', label: 'IPS' },
-      { key: 'Bahasa Inggris', label: 'BIG' },
-      { key: 'Seni dan Prakarya', label: 'SENI' },
-      { key: 'PJOK', label: 'PJOK' },
-      { key: 'Informatika', label: 'INF' },
-      { key: 'Bahasa Jawa', label: 'B.JAWA' },
+      { key: 'PAI', label: 'PAI', full: 'Pendidikan Agama dan Budi Pekerti' },
+      { key: 'Pendidikan Pancasila', label: 'PPKn', full: 'Pendidikan Pancasila' },
+      { key: 'Bahasa Indonesia', label: 'BIN', full: 'Bahasa Indonesia' },
+      { key: 'Matematika', label: 'MTK', full: 'Matematika' },
+      { key: 'IPA', label: 'IPA', full: 'Ilmu Pengetahuan Alam' },
+      { key: 'IPS', label: 'IPS', full: 'Ilmu Pengetahuan Sosial' },
+      { key: 'Bahasa Inggris', label: 'BIG', full: 'Bahasa Inggris' },
+      { key: 'PJOK', label: 'PJOK', full: 'PJOK' },
+      { key: 'Informatika', label: 'INF', full: 'Informatika' },
+      { key: 'Seni dan Prakarya', label: 'SENI', full: 'Seni dan Prakarya' },
+      { key: 'Bahasa Jawa', label: 'B.JAWA', full: 'Bahasa Jawa' },
   ];
 
   const filteredStudents = students.filter(s => {
@@ -54,6 +55,10 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
       if (!record) return 0;
       const subj = record.subjects.find(sub => sub.subject.startsWith(subjKey) || (subjKey === 'PAI' && sub.subject.includes('Agama')));
       return subj ? subj.score : 0;
+  };
+
+  const getRecord = (s: Student): AcademicRecord | undefined => {
+      return s.academicRecords?.[dbSemester];
   };
 
   const setScore = (s: Student, subjKey: string, val: number) => {
@@ -73,12 +78,9 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
 
   // --- DELETE FUNCTION (FIXED) ---
   const handleDeleteRow = (student: Student) => {
-      // PERMINTAAN USER: "apakah anda yakin menghapus?"
       if (window.confirm("apakah anda yakin menghapus?")) {
-          // Reset semua nilai semester ini jadi 0
           SUBJECT_MAP.forEach(sub => setScore(student, sub.key, 0));
-          
-          setRenderKey(prev => prev + 1); // Paksa render ulang
+          setRenderKey(prev => prev + 1); 
           alert("Data nilai berhasil dihapus (Reset ke 0).");
       }
   };
@@ -99,9 +101,8 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
       
       for (let i = 0; i < total; i++) {
           const s = filteredStudents[i];
-          await new Promise(r => setTimeout(r, 50)); // Visual Delay
+          await new Promise(r => setTimeout(r, 50)); 
 
-          // Simulasi nilai masuk
           SUBJECT_MAP.forEach(sub => {
              const rnd = Math.floor(Math.random() * 20) + 75;
              setScore(s, sub.key, rnd);
@@ -129,121 +130,397 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
       setRenderKey(prev => prev + 1);
   };
 
-  // --- RENDER ---
-  if (userRole === 'STUDENT') return <div className="p-10 text-center">Fitur Siswa disederhanakan untuk demo ini.</div>;
+  // --- REPORT VIEW ---
+  const handleViewReport = (s: Student) => {
+      setSelectedStudent(s);
+      setViewMode('REPORT');
+  };
+
+  const ReportView = ({ student }: { student: Student }) => {
+      const record = getRecord(student);
+      const subjects = record?.subjects || [];
+      const getSubjData = (key: string) => subjects.find(s => s.subject.includes(key) || (key === 'PAI' && s.subject.includes('Agama')));
+
+      return (
+          <div className="bg-white p-8 shadow-lg max-w-[210mm] mx-auto min-h-[297mm] text-black font-serif text-sm leading-tight">
+                {/* Header */}
+                <div className="mb-6 font-bold text-sm">
+                    <table className="w-full">
+                        <tbody>
+                            <tr>
+                                <td className="w-40 py-0.5">Nama Peserta Didik</td>
+                                <td className="py-0.5">: {student.fullName}</td>
+                                <td className="w-24 py-0.5">Semester</td>
+                                <td className="py-0.5">: {dbSemester} (Satu)</td>
+                            </tr>
+                            <tr>
+                                <td className="py-0.5">Kelas</td>
+                                <td className="py-0.5">: {student.className}</td>
+                                <td className="py-0.5">Fase</td>
+                                <td className="py-0.5">: D</td>
+                            </tr>
+                            <tr>
+                                <td className="py-0.5">Sekolah</td>
+                                <td className="py-0.5">: SMPN 3 PACET</td>
+                                <td className="py-0.5">Tahun</td>
+                                <td className="py-0.5">: 2024-2025</td>
+                            </tr>
+                            <tr>
+                                <td className="py-0.5 align-top">Alamat</td>
+                                <td className="py-0.5" colSpan={3}>: Jl. Tirtowening- Ds. Kembangbelor - Kec. Pacet Kab. Mojokerto</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* A. Intrakurikuler */}
+                <h3 className="font-bold mb-2">A. INTRAKURIKULER</h3>
+                <table className="w-full border-collapse border border-black mb-6 text-xs">
+                    <thead>
+                        <tr className="bg-white text-center font-bold">
+                            <td className="border border-black p-2 w-10">NO</td>
+                            <td className="border border-black p-2">MATA PELAJARAN</td>
+                            <td className="border border-black p-2 w-20">NILAI AKHIR</td>
+                            <td className="border border-black p-2">CAPAIAN KOMPETENSI</td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {SUBJECT_MAP.map((sub, idx) => {
+                            const data = getSubjData(sub.key);
+                            // Custom rendering for Seni & Bahasa Jawa per request structure
+                            if (sub.key === 'Seni dan Prakarya') {
+                                return (
+                                    <React.Fragment key={sub.key}>
+                                        <tr>
+                                            <td className="border border-black p-2 text-center align-top">{idx + 1}</td>
+                                            <td className="border border-black p-2">
+                                                <div>Seni dan Prakarya</div>
+                                                <div className="pl-4">a. Seni Musik</div>
+                                                <div className="pl-4">b. Seni Rupa</div>
+                                            </td>
+                                            <td className="border border-black p-2 text-center align-top font-bold">
+                                                <div className="mb-4"></div>
+                                                <div>{data?.score || '#N/A'}</div>
+                                            </td>
+                                            <td className="border border-black p-2 italic align-top">
+                                                <div className="mb-4"></div>
+                                                <div>{data?.competency || '#N/A'}</div>
+                                            </td>
+                                        </tr>
+                                    </React.Fragment>
+                                )
+                            }
+                             if (sub.key === 'Bahasa Jawa') {
+                                return (
+                                    <tr key={sub.key}>
+                                        <td className="border border-black p-2 text-center"></td>
+                                        <td className="border border-black p-2 pl-4">a. Bahasa Jawa</td>
+                                        <td className="border border-black p-2 text-center font-bold">{data?.score || '#N/A'}</td>
+                                        <td className="border border-black p-2 italic">{data?.competency || '#N/A'}</td>
+                                    </tr>
+                                )
+                            }
+                            return (
+                                <tr key={sub.key}>
+                                    <td className="border border-black p-2 text-center">{idx + 1}</td>
+                                    <td className="border border-black p-2">{sub.full}</td>
+                                    <td className="border border-black p-2 text-center font-bold">{data?.score || '#N/A'}</td>
+                                    <td className="border border-black p-2 italic">{data?.competency || '#N/A'}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+
+                {/* B. P5 */}
+                <h3 className="font-bold mb-2">B. DESKRIPSI NILAI P5</h3>
+                <table className="w-full border-collapse border border-black mb-6 text-xs">
+                    <thead>
+                        <tr className="bg-white text-center font-bold">
+                            <td className="border border-black p-2 w-10">NO</td>
+                            <td className="border border-black p-2">TEMA</td>
+                            <td className="border border-black p-2">DESKRIPSI</td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {record?.p5Projects && record.p5Projects.length > 0 ? record.p5Projects.map((p5, idx) => (
+                            <tr key={idx}>
+                                <td className="border border-black p-2 text-center">{idx + 1}</td>
+                                <td className="border border-black p-2">{p5.theme}</td>
+                                <td className="border border-black p-2">{p5.description}</td>
+                            </tr>
+                        )) : (
+                            <>
+                                <tr>
+                                    <td className="border border-black p-2 text-center">1</td>
+                                    <td className="border border-black p-2">Berekayasa dan Berteknologi untuk membangun NKRI</td>
+                                    <td className="border border-black p-2">Berkembang sesuai harapan</td>
+                                </tr>
+                                <tr>
+                                    <td className="border border-black p-2 text-center">2</td>
+                                    <td className="border border-black p-2">-</td>
+                                    <td className="border border-black p-2">-</td>
+                                </tr>
+                            </>
+                        )}
+                    </tbody>
+                </table>
+
+                {/* C. Ekstrakurikuler */}
+                <h3 className="font-bold mb-2">C. EKSTRAKURIKULER</h3>
+                <table className="w-full border-collapse border border-black mb-6 text-xs">
+                    <thead>
+                        <tr className="bg-white text-center font-bold">
+                            <td className="border border-black p-2 w-10">NO</td>
+                            <td className="border border-black p-2">KEGIATAN EKSTRAKURIKULER</td>
+                            <td className="border border-black p-2 w-32">PREDIKAT</td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {['Pramuka', 'PMR', 'Tari', 'Jurnalistik', 'Futsal'].map((ex, idx) => {
+                            const data = record?.extracurriculars?.find(e => e.name === ex);
+                            return (
+                                <tr key={ex}>
+                                    <td className="border border-black p-2 text-center">{idx === 0 ? '1' : ''}</td>
+                                    <td className="border border-black p-2">{ex}</td>
+                                    <td className="border border-black p-2 text-center">{data?.score || '-'}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+
+                {/* D. Catatan & Ketidakhadiran */}
+                <div className="grid grid-cols-2 gap-6 mb-8">
+                    <div>
+                        <h3 className="font-bold mb-2">D. CATATAN WALI KELAS</h3>
+                        <div className="border border-black p-4 text-xs h-32 italic flex items-center justify-center text-center">
+                            {record?.teacherNote || "Niat yang tulus untuk belajar terlihat jelas dari usahamu mengikuti kegiatan belajar dengan baik."}
+                        </div>
+                        
+                        <div className="mt-4 border border-black p-2 text-xs">
+                            <div className="font-bold mb-1">KENAIKAN KELAS</div>
+                            <div className="flex"><span className="w-24">Naik Kelas</span><span>: -</span></div>
+                            <div className="flex"><span className="w-24">Tanggal</span><span>: -</span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 className="font-bold mb-2">KETIDAKHADIRAN</h3>
+                        <table className="w-full border-collapse border border-black text-xs">
+                            <tbody>
+                                <tr>
+                                    <td className="border border-black p-2">1. Sakit</td>
+                                    <td className="border border-black p-2 text-center w-16">{record?.attendance.sick ?? '#N/A'}</td>
+                                    <td className="border border-black p-2 w-16">Hari</td>
+                                </tr>
+                                <tr>
+                                    <td className="border border-black p-2">2. Ijin</td>
+                                    <td className="border border-black p-2 text-center">{record?.attendance.permitted ?? '#N/A'}</td>
+                                    <td className="border border-black p-2">Hari</td>
+                                </tr>
+                                <tr>
+                                    <td className="border border-black p-2">3. Tanpa Keterangan</td>
+                                    <td className="border border-black p-2 text-center">{record?.attendance.noReason ?? '#N/A'}</td>
+                                    <td className="border border-black p-2">Hari</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* Signatures */}
+                <div className="flex justify-between text-xs mt-10 px-8 font-serif">
+                    <div className="text-center w-1/3">
+                        <p className="mb-20">Mengetahui,<br/>Orang Tua/Wali</p>
+                        <p className="font-bold border-t border-black px-4 pt-1 inline-block min-w-[150px]"></p>
+                    </div>
+                    
+                    {/* Dummy Spacer */}
+                    <div className="w-10"></div>
+
+                    <div className="text-center w-1/3 relative">
+                        <p className="mb-1">Pacet, 20 Desember 2024</p>
+                        <p className="mb-16">WALI KELAS</p>
+                        <p className="font-bold underline decoration-1 underline-offset-2">#N/A</p>
+                        <p>NIP. -</p>
+                    </div>
+                </div>
+                
+                <div className="flex justify-center text-xs mt-8 font-serif">
+                    <div className="text-center">
+                        <p className="mb-16">KEPALA SEKOLAH</p>
+                        <p className="font-bold underline decoration-1 underline-offset-2">DIDIK SULISTYO, M.M.Pd</p>
+                        <p>NIP. 19660518198901 1 002</p>
+                    </div>
+                </div>
+          </div>
+      );
+  };
 
   return (
-    <div className="flex flex-col h-full space-y-4 animate-fade-in relative">
-        
-        {/* IMPORT MODAL */}
-        {isImporting && (
-            <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-2xl w-80 p-6 flex flex-col items-center">
-                    {!importStats ? (
-                        <>
-                            <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
-                            <h3 className="font-bold text-gray-800">Import Nilai...</h3>
-                            <div className="w-full bg-gray-200 h-3 rounded-full mt-4 overflow-hidden">
-                                <div className="bg-blue-600 h-full transition-all" style={{ width: `${importProgress}%` }}></div>
-                            </div>
-                            <p className="mt-2 text-blue-600 font-bold">{importProgress}%</p>
-                        </>
-                    ) : (
-                        <>
-                            <CheckCircle2 className="w-12 h-12 text-green-600 mb-4" />
-                            <h3 className="font-bold text-gray-800">Selesai!</h3>
-                            <p className="text-sm text-gray-500 mb-4">{importStats.processed} nilai siswa masuk.</p>
-                            <button onClick={() => setIsImporting(false)} className="w-full py-2 bg-blue-600 text-white rounded font-bold">Tutup</button>
-                        </>
-                    )}
+    <div className="flex flex-col h-full space-y-4 animate-fade-in">
+      {/* Toolbar */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+        {viewMode === 'DATABASE' ? (
+             <>
+                <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto">
+                    <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-2 rounded-lg font-bold text-sm border border-green-100">
+                        <FileSpreadsheet className="w-4 h-4" /> 
+                        <span>Input Nilai</span>
+                    </div>
+                    
+                    <select 
+                        className="pl-3 pr-8 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium" 
+                        value={dbClassFilter} 
+                        onChange={(e) => setDbClassFilter(e.target.value)}
+                    >
+                        <option value="ALL">Semua Kelas</option>
+                        {CLASS_LIST.map(c => <option key={c} value={c}>Kelas {c}</option>)}
+                    </select>
+
+                    <select 
+                        className="pl-3 pr-8 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium"
+                        value={dbSemester}
+                        onChange={(e) => setDbSemester(Number(e.target.value))}
+                    >
+                        <option value={1}>Semester 1 (Ganjil)</option>
+                        <option value={2}>Semester 2 (Genap)</option>
+                    </select>
+                </div>
+
+                <div className="flex gap-2 w-full xl:w-auto">
+                     <div className="relative flex-1 xl:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <input 
+                            type="text" 
+                            placeholder="Cari Siswa..." 
+                            className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg text-sm outline-none focus:bg-white border border-transparent focus:border-blue-300 transition-all"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                     </div>
+                     <button onClick={handleImportClick} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 flex items-center gap-2 shadow-sm whitespace-nowrap">
+                        <UploadCloud className="w-4 h-4" /> Import Excel
+                     </button>
+                     <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileChange} />
+                </div>
+             </>
+        ) : (
+            <div className="w-full flex justify-between items-center">
+                <button onClick={() => setViewMode('DATABASE')} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold hover:bg-gray-50 text-gray-700">
+                    <ArrowLeft className="w-4 h-4" /> Kembali
+                </button>
+                <div className="flex gap-2">
+                    <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm" onClick={() => window.print()}>
+                        <Printer className="w-4 h-4" /> Cetak / PDF
+                    </button>
                 </div>
             </div>
         )}
+      </div>
 
-        {/* TOOLBAR */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col xl:flex-row justify-between items-center gap-4">
-             <div className="flex items-center gap-3">
-                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><LayoutList className="w-5 h-5 text-blue-600" /> Database Nilai</h2>
-                 
-                 <select className="px-3 py-2 bg-gray-100 rounded border border-gray-200 text-sm font-bold" value={dbClassFilter} onChange={e => setDbClassFilter(e.target.value)}>
-                     <option value="ALL">Semua Kelas</option>
-                     {CLASS_LIST.map(c => <option key={c} value={c}>Kelas {c}</option>)}
-                 </select>
-                 
-                 <div className="flex bg-gray-100 rounded border border-gray-200 p-1">
-                     {[1,2,3,4,5,6].map(s => (
-                         <button key={s} onClick={()=>setDbSemester(s)} className={`px-3 py-1 text-xs font-bold rounded ${dbSemester===s?'bg-white shadow text-blue-600':'text-gray-500'}`}>S{s}</button>
-                     ))}
+      {/* Main Content */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex-1 overflow-hidden flex flex-col relative">
+          
+          {/* IMPORT OVERLAY */}
+          {isImporting && (
+             <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                 <div className="bg-white rounded-xl shadow-2xl p-6 flex flex-col items-center w-80 animate-fade-in">
+                    {!importStats ? (
+                        <>
+                            <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+                            <h3 className="font-bold text-gray-800">Mengimport Nilai...</h3>
+                            <div className="w-full bg-gray-200 rounded-full h-3 mt-4 overflow-hidden">
+                                <div className="bg-blue-600 h-full transition-all duration-100" style={{ width: `${importProgress}%` }}></div>
+                            </div>
+                            <span className="text-xs font-bold text-gray-500 mt-2">{importProgress}% Selesai</span>
+                        </>
+                    ) : (
+                        <>
+                             <CheckCircle2 className="w-12 h-12 text-green-600 mb-4" />
+                             <h3 className="font-bold text-gray-800">Import Selesai!</h3>
+                             <p className="text-sm text-gray-500 mt-1">{importStats.processed} Data siswa berhasil diupdate.</p>
+                             <button onClick={() => setIsImporting(false)} className="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700">Tutup</button>
+                        </>
+                    )}
                  </div>
              </div>
+          )}
 
-             <div className="flex gap-2">
-                 <button onClick={handleImportClick} className="px-4 py-2 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 flex items-center gap-2">
-                     <UploadCloud className="w-4 h-4" /> Import Excel
-                 </button>
-                 <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx" onChange={handleFileChange} />
-             </div>
-        </div>
+          {viewMode === 'DATABASE' ? (
+              <div className="overflow-auto flex-1 w-full">
+                  <table className="border-collapse w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10 shadow-sm text-gray-600 uppercase text-xs">
+                          <tr>
+                              <th className="px-4 py-3 text-left w-16">Aksi</th>
+                              <th className="px-4 py-3 text-left min-w-[200px]">Nama Siswa</th>
+                              <th className="px-4 py-3 text-center">Kelas</th>
+                              {SUBJECT_MAP.map(sub => (
+                                  <th key={sub.key} className="px-2 py-3 text-center min-w-[60px]" title={sub.full}>{sub.label}</th>
+                              ))}
+                              <th className="px-4 py-3 text-center">Rata-rata</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                          {filteredStudents.length > 0 ? filteredStudents.map((student) => {
+                              const isEditingRow = editingId === student.id;
+                              let totalScore = 0;
+                              let count = 0;
 
-        {/* TABLE */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex-1 overflow-auto">
-            <table className="w-full text-left border-collapse min-w-max">
-                <thead className="sticky top-0 z-20 bg-gray-50 border-b shadow-sm">
-                    <tr>
-                        <th className="px-3 py-3 text-center w-24 sticky left-0 bg-gray-50 z-30">Aksi</th>
-                        <th className="px-3 py-3 sticky left-24 bg-gray-50 z-30 w-48">Nama Siswa</th>
-                        <th className="px-3 py-3 w-20">Kelas</th>
-                        {SUBJECT_MAP.map(s => <th key={s.key} className="px-2 py-3 text-center w-16 text-[10px] uppercase font-bold text-gray-600 bg-blue-50/20 border-l border-blue-100">{s.label}</th>)}
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                    {filteredStudents.map((s) => {
-                        const isEdit = editingId === s.id;
-                        return (
-                            <tr key={s.id} className="hover:bg-blue-50">
-                                <td className="px-2 py-2 text-center sticky left-0 bg-white border-r z-20">
-                                    {isEdit ? (
-                                        <div className="flex justify-center gap-1">
-                                            <button onClick={()=>saveEdit(s)} className="p-1.5 bg-green-100 text-green-600 rounded"><Save className="w-4 h-4" /></button>
-                                            <button onClick={()=>setEditingId(null)} className="p-1.5 bg-gray-100 text-gray-500 rounded"><X className="w-4 h-4" /></button>
-                                        </div>
-                                    ) : (
-                                        <div className="flex justify-center gap-1">
-                                            <button onClick={()=>startEdit(s)} className="p-1.5 bg-blue-100 text-blue-600 rounded"><Pencil className="w-4 h-4" /></button>
-                                            <button 
-                                                onClick={() => handleDeleteRow(s)} 
-                                                className="p-1.5 bg-red-100 text-red-600 rounded hover:bg-red-200"
-                                                title="Hapus Nilai"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    )}
-                                </td>
-                                <td className="px-3 py-2 font-bold text-sm text-gray-800 sticky left-24 bg-white border-r z-20">{s.fullName}</td>
-                                <td className="px-3 py-2 text-center text-xs">{s.className}</td>
-                                {SUBJECT_MAP.map(sub => (
-                                    <td key={sub.key} className="px-1 py-1 text-center border-l border-gray-100">
-                                        {isEdit ? (
-                                            <input 
-                                                type="number" 
-                                                className="w-full text-center p-1 border rounded font-bold"
-                                                value={editScores[sub.key]}
-                                                onChange={e => setEditScores({...editScores, [sub.key]: Number(e.target.value)})}
-                                            />
-                                        ) : (
-                                            <span className={`text-xs ${getScore(s, sub.key) < 75 ? 'text-red-600 font-bold' : 'text-gray-800'}`}>
-                                                {getScore(s, sub.key)}
-                                            </span>
-                                        )}
-                                    </td>
-                                ))}
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
-        </div>
+                              return (
+                                  <tr key={student.id + renderKey} className="hover:bg-blue-50 transition-colors group">
+                                      <td className="px-4 py-2 flex gap-1 items-center">
+                                          {isEditingRow ? (
+                                              <>
+                                                <button onClick={() => saveEdit(student)} className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"><Save className="w-4 h-4" /></button>
+                                                <button onClick={() => setEditingId(null)} className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"><X className="w-4 h-4" /></button>
+                                              </>
+                                          ) : (
+                                              <>
+                                                <button onClick={() => startEdit(student)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded" title="Edit Nilai"><Pencil className="w-4 h-4" /></button>
+                                                <button onClick={() => handleViewReport(student)} className="p-1.5 text-purple-600 hover:bg-purple-100 rounded" title="Lihat Rapor"><LayoutList className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDeleteRow(student)} className="p-1.5 text-red-600 hover:bg-red-100 rounded" title="Hapus Nilai"><Trash2 className="w-4 h-4" /></button>
+                                              </>
+                                          )}
+                                      </td>
+                                      <td className="px-4 py-2 font-medium text-gray-900">{student.fullName}</td>
+                                      <td className="px-4 py-2 text-center text-gray-500">{student.className}</td>
+                                      {SUBJECT_MAP.map(sub => {
+                                          const score = isEditingRow ? (editScores[sub.key] || 0) : getScore(student, sub.key);
+                                          if (!isEditingRow) { totalScore += score; count++; }
+
+                                          return (
+                                              <td key={sub.key} className="px-2 py-2 text-center">
+                                                  {isEditingRow ? (
+                                                      <input 
+                                                          type="number" 
+                                                          className="w-12 text-center border border-blue-300 rounded p-1 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                                                          value={editScores[sub.key] || 0}
+                                                          onChange={(e) => setEditScores({...editScores, [sub.key]: Number(e.target.value)})}
+                                                      />
+                                                  ) : (
+                                                      <span className={`font-semibold ${score < 75 ? 'text-red-500' : 'text-gray-700'}`}>{score}</span>
+                                                  )}
+                                              </td>
+                                          );
+                                      })}
+                                      <td className="px-4 py-2 text-center font-bold text-blue-700">
+                                          {count > 0 ? (totalScore / count).toFixed(1) : '-'}
+                                      </td>
+                                  </tr>
+                              );
+                          }) : (
+                              <tr><td colSpan={15} className="p-8 text-center text-gray-500">Tidak ada data siswa.</td></tr>
+                          )}
+                      </tbody>
+                  </table>
+              </div>
+          ) : (
+              <div className="overflow-auto flex-1 bg-gray-500/10 p-8 flex justify-center">
+                  {selectedStudent && <ReportView student={selectedStudent} />}
+              </div>
+          )}
+      </div>
     </div>
   );
 };
