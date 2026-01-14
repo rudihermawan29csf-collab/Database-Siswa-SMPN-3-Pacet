@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Student, AcademicRecord } from '../types';
 import { Search, FileSpreadsheet, Download, UploadCloud, Trash2, Save, Pencil, X, CheckCircle2, Loader2, LayoutList, ArrowLeft, Printer } from 'lucide-react';
-import * as XLSX from 'xlsx';
 
 interface GradesViewProps {
   students: Student[];
@@ -89,12 +88,12 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
   // --- DOWNLOAD TEMPLATE FUNCTION ---
   const handleDownloadTemplate = () => {
       try {
-          // Handle esm.sh export structure
+          // Use Global XLSX Object loaded via script tag in index.html
           // @ts-ignore
-          const xlsx = XLSX.default ?? XLSX;
+          const xlsx = window.XLSX;
 
           if (!xlsx || !xlsx.utils) {
-              alert("Library Excel belum siap. Silakan refresh halaman.");
+              alert("Library Excel (SheetJS) belum siap. Pastikan koneksi internet lancar dan refresh halaman.");
               return;
           }
 
@@ -103,7 +102,7 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
           }
 
           if (filteredStudents.length === 0) {
-              alert("Tidak ada data siswa yang ditampilkan untuk didownload.");
+              alert("Tidak ada data siswa yang ditampilkan untuk didownload. Pilih filter kelas lain.");
               return;
           }
 
@@ -148,7 +147,7 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
           xlsx.writeFile(wb, fileName);
       } catch (error) {
           console.error("Download failed:", error);
-          alert("Gagal mendownload template. Cek console untuk detail.");
+          alert("Gagal mendownload template. Cek console browser untuk detail error.");
       }
   };
 
@@ -167,8 +166,13 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
       
       reader.onload = (evt) => {
           try {
+              // Use Global XLSX
               // @ts-ignore
-              const xlsx = XLSX.default ?? XLSX;
+              const xlsx = window.XLSX;
+              
+              if (!xlsx) {
+                  throw new Error("Library XLSX not found");
+              }
 
               const bstr = evt.target?.result;
               const wb = xlsx.read(bstr, { type: 'binary' });
