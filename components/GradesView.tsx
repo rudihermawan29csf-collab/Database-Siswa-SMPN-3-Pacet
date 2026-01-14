@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Student, AcademicRecord } from '../types';
 import { Search, FileSpreadsheet, Download, UploadCloud, Trash2, Save, Pencil, X, CheckCircle2, Loader2, LayoutList, ArrowLeft, Printer } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface GradesViewProps {
   students: Student[];
@@ -27,7 +28,7 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
-  const [importStats, setImportStats] = useState<{ processed: number } | null>(null);
+  const [importStats, setImportStats] = useState<{ processed: number, success: number } | null>(null);
 
   const SUBJECT_MAP = [
       { key: 'PAI', label: 'PAI', full: 'Pendidikan Agama dan Budi Pekerti' },
@@ -85,34 +86,139 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
       }
   };
 
-  // --- IMPORT FUNCTION (FIXED) ---
+  // --- DOWNLOAD TEMPLATE FUNCTION ---
+  const handleDownloadTemplate = () => {
+      try {
+          // Handle esm.sh export structure
+          // @ts-ignore
+          const xlsx = XLSX.default ?? XLSX;
+
+          if (!xlsx || !xlsx.utils) {
+              alert("Library Excel belum siap. Silakan refresh halaman.");
+              return;
+          }
+
+          if (dbClassFilter === 'ALL') {
+              if (!window.confirm("Anda akan mendownload template untuk SEMUA siswa. Proses mungkin agak lama. Lanjutkan?")) return;
+          }
+
+          if (filteredStudents.length === 0) {
+              alert("Tidak ada data siswa yang ditampilkan untuk didownload.");
+              return;
+          }
+
+          // Prepare Data
+          const dataToExport = filteredStudents.map((s, index) => {
+              const row: any = {
+                  'No': index + 1,
+                  'NISN': s.nisn || '', // Key identifier
+                  'Nama Siswa': s.fullName,
+                  'Kelas': s.className,
+              };
+              
+              // Add Columns for each subject (pre-fill with existing scores if any)
+              SUBJECT_MAP.forEach(sub => {
+                  row[sub.label] = getScore(s, sub.key) || '';
+              });
+
+              return row;
+          });
+
+          // Create Worksheet
+          const ws = xlsx.utils.json_to_sheet(dataToExport);
+          
+          // Auto-width for columns
+          const wscols = [
+              { wch: 5 },  // No
+              { wch: 15 }, // NISN
+              { wch: 30 }, // Nama
+              { wch: 10 }, // Kelas
+              ...SUBJECT_MAP.map(() => ({ wch: 8 })) // Subjects
+          ];
+          ws['!cols'] = wscols;
+
+          // Create Workbook
+          const wb = xlsx.utils.book_new();
+          xlsx.utils.book_append_sheet(wb, ws, "Nilai Siswa");
+
+          // Generate File Name
+          const fileName = `Template_Nilai_${dbClassFilter === 'ALL' ? 'Semua' : dbClassFilter.replace(/\s/g, '')}_Sem${dbSemester}.xlsx`;
+
+          // Download
+          xlsx.writeFile(wb, fileName);
+      } catch (error) {
+          console.error("Download failed:", error);
+          alert("Gagal mendownload template. Cek console untuk detail.");
+      }
+  };
+
+  // --- IMPORT FUNCTION (REAL PARSING) ---
   const handleImportClick = () => fileInputRef.current?.click();
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      if (filteredStudents.length === 0) { alert("Pilih Filter Kelas dulu!"); return; }
 
       setIsImporting(true);
       setImportProgress(0);
       setImportStats(null);
 
-      const total = filteredStudents.length;
+      const reader = new FileReader();
       
-      for (let i = 0; i < total; i++) {
-          const s = filteredStudents[i];
-          await new Promise(r => setTimeout(r, 50)); 
+      reader.onload = (evt) => {
+          try {
+              // @ts-ignore
+              const xlsx = XLSX.default ?? XLSX;
 
-          SUBJECT_MAP.forEach(sub => {
-             const rnd = Math.floor(Math.random() * 20) + 75;
-             setScore(s, sub.key, rnd);
-          });
+              const bstr = evt.target?.result;
+              const wb = xlsx.read(bstr, { type: 'binary' });
+              const wsname = wb.SheetNames[0];
+              const ws = wb.Sheets[wsname];
+              const data = xlsx.utils.sheet_to_json(ws);
 
-          setImportProgress(Math.round(((i + 1) / total) * 100));
-      }
+              let updatedCount = 0;
+              const totalRows = data.length;
 
-      setImportStats({ processed: total });
-      setRenderKey(prev => prev + 1);
+              // Process Data
+              data.forEach((row: any, index) => {
+                  // Find student by NISN (Most accurate) or Name
+                  const nisn = row['NISN'] ? String(row['NISN']).trim() : '';
+                  const name = row['Nama Siswa'] ? String(row['Nama Siswa']).trim().toLowerCase() : '';
+
+                  const targetStudent = students.find(s => 
+                      (nisn && s.nisn === nisn) || 
+                      (s.fullName.toLowerCase() === name && s.className === row['Kelas'])
+                  );
+
+                  if (targetStudent) {
+                      // Update scores based on map
+                      SUBJECT_MAP.forEach(sub => {
+                          if (row[sub.label] !== undefined && row[sub.label] !== '') {
+                              const score = Number(row[sub.label]);
+                              if (!isNaN(score)) {
+                                  setScore(targetStudent, sub.key, score);
+                              }
+                          }
+                      });
+                      updatedCount++;
+                  }
+                  
+                  // Update progress periodically
+                  if (index % 5 === 0) setImportProgress(Math.round(((index + 1) / totalRows) * 100));
+              });
+
+              setImportStats({ processed: totalRows, success: updatedCount });
+              setRenderKey(prev => prev + 1);
+              setImportProgress(100);
+
+          } catch (error) {
+              console.error("Error parsing Excel:", error);
+              alert("Gagal membaca file Excel. Pastikan format sesuai template.");
+              setIsImporting(false);
+          }
+      };
+
+      reader.readAsBinaryString(file);
       if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -399,10 +505,17 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                      </div>
-                     <button onClick={handleImportClick} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 flex items-center gap-2 shadow-sm whitespace-nowrap">
-                        <UploadCloud className="w-4 h-4" /> Import Excel
-                     </button>
-                     <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={handleFileChange} />
+                     {userRole === 'ADMIN' && (
+                         <>
+                            <button onClick={handleDownloadTemplate} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 flex items-center gap-2 shadow-sm whitespace-nowrap">
+                                <Download className="w-4 h-4" /> Template
+                            </button>
+                            <button onClick={handleImportClick} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 flex items-center gap-2 shadow-sm whitespace-nowrap">
+                                <UploadCloud className="w-4 h-4" /> Upload Nilai
+                            </button>
+                            <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx" onChange={handleFileChange} />
+                         </>
+                     )}
                 </div>
              </>
         ) : (
@@ -429,7 +542,7 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                     {!importStats ? (
                         <>
                             <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
-                            <h3 className="font-bold text-gray-800">Mengimport Nilai...</h3>
+                            <h3 className="font-bold text-gray-800">Membaca Excel...</h3>
                             <div className="w-full bg-gray-200 rounded-full h-3 mt-4 overflow-hidden">
                                 <div className="bg-blue-600 h-full transition-all duration-100" style={{ width: `${importProgress}%` }}></div>
                             </div>
@@ -439,7 +552,9 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                         <>
                              <CheckCircle2 className="w-12 h-12 text-green-600 mb-4" />
                              <h3 className="font-bold text-gray-800">Import Selesai!</h3>
-                             <p className="text-sm text-gray-500 mt-1">{importStats.processed} Data siswa berhasil diupdate.</p>
+                             <p className="text-sm text-gray-500 mt-1">
+                                {importStats.success} dari {importStats.processed} Siswa berhasil diupdate.
+                             </p>
                              <button onClick={() => setIsImporting(false)} className="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700">Tutup</button>
                         </>
                     )}
@@ -483,7 +598,10 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                                               </>
                                           )}
                                       </td>
-                                      <td className="px-4 py-2 font-medium text-gray-900">{student.fullName}</td>
+                                      <td className="px-4 py-2 font-medium text-gray-900">
+                                          <div>{student.fullName}</div>
+                                          <div className="text-xs text-gray-400 font-mono">{student.nisn}</div>
+                                      </td>
                                       <td className="px-4 py-2 text-center text-gray-500">{student.className}</td>
                                       {SUBJECT_MAP.map(sub => {
                                           const score = isEditingRow ? (editScores[sub.key] || 0) : getScore(student, sub.key);

@@ -13,6 +13,30 @@ interface StudentDetailProps {
   onUpdate?: () => void;
 }
 
+const getDriveUrl = (url: string, type: 'preview' | 'direct') => {
+    if (!url) return '';
+    if (url.startsWith('blob:')) return url;
+
+    if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
+        let id = '';
+        const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            id = match[1];
+        } else {
+            try {
+                const urlObj = new URL(url);
+                id = urlObj.searchParams.get('id') || '';
+            } catch (e) {}
+        }
+
+        if (id) {
+            if (type === 'preview') return `https://drive.google.com/file/d/${id}/preview`;
+            if (type === 'direct') return `https://drive.google.com/uc?export=view&id=${id}`;
+        }
+    }
+    return url;
+};
+
 const PDFPage: React.FC<{ pdf: any, pageNum: number }> = ({ pdf, pageNum }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [rendered, setRendered] = useState(false);
@@ -85,6 +109,7 @@ const StudentDetail: React.FC<StudentDetailProps> = ({ student, onBack, viewMode
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
 
   useEffect(() => {
     setStudentDocuments(student.documents);
@@ -116,6 +141,14 @@ const StudentDetail: React.FC<StudentDetailProps> = ({ student, onBack, viewMode
       const loadPdf = async () => {
           setPdfDoc(null);
           setNumPages(0);
+          setUseFallback(false);
+          
+          // Force Fallback for Drive URLs regardless of Type
+          if (evidenceViewer && (evidenceViewer.url.includes('drive.google.com') || evidenceViewer.url.includes('docs.google.com'))) {
+              setUseFallback(true);
+              return;
+          }
+
           if (evidenceViewer?.type === 'PDF') {
               setIsPdfLoading(true);
               try {
@@ -127,12 +160,18 @@ const StudentDetail: React.FC<StudentDetailProps> = ({ student, onBack, viewMode
                       pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
                   }
 
-                  const loadingTask = pdfjs.getDocument(evidenceViewer.url);
+                  // FIX: Fetch ArrayBuffer explicitly
+                  const response = await fetch(evidenceViewer.url);
+                  if (!response.ok) throw new Error("Network error");
+                  const arrayBuffer = await response.arrayBuffer();
+
+                  const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
                   const pdf = await loadingTask.promise;
                   setPdfDoc(pdf);
                   setNumPages(pdf.numPages);
               } catch (e) {
-                  console.error("Failed to load PDF evidence", e);
+                  console.error("Failed to load PDF evidence, fallback", e);
+                  setUseFallback(true);
               } finally {
                   setIsPdfLoading(false);
               }
@@ -346,13 +385,20 @@ const StudentDetail: React.FC<StudentDetailProps> = ({ student, onBack, viewMode
              </div>
              <div className="flex-1 overflow-y-auto p-8 flex justify-center items-start">
                  <div className="max-w-4xl w-full bg-white/5 rounded-lg p-1 min-h-[50vh] flex flex-col items-center justify-center">
-                    {evidenceViewer.type === 'IMAGE' && ( <img src={evidenceViewer.url} alt="Evidence" className="max-w-full h-auto rounded shadow-2xl" /> )}
-                    {evidenceViewer.type === 'PDF' && (
-                        <div className="w-full flex flex-col items-center">
-                            {isPdfLoading && ( <div className="flex flex-col items-center text-white/70 py-10"><Loader2 className="w-8 h-8 animate-spin mb-2" /><span>Memproses Halaman PDF...</span></div> )}
-                            {!isPdfLoading && pdfDoc && numPages > 0 && ( <div className="w-full space-y-4">{Array.from(new Array(numPages), (el, index) => ( <PDFPage key={index} pdf={pdfDoc} pageNum={index + 1} /> ))}</div> )}
-                             {!isPdfLoading && !pdfDoc && ( <div className="text-red-400">Gagal memuat PDF.</div> )}
-                        </div>
+                    {(useFallback) ? (
+                        <iframe src={getDriveUrl(evidenceViewer.url, 'preview')} className="w-full h-[800px] border-none bg-white rounded" title="Viewer" />
+                    ) : (
+                        evidenceViewer.type === 'IMAGE' ? ( 
+                            <img src={getDriveUrl(evidenceViewer.url, 'direct')} alt="Evidence" className="max-w-full h-auto rounded shadow-2xl" /> 
+                        ) : (
+                            <div className="w-full flex flex-col items-center">
+                                {isPdfLoading ? <div className="flex flex-col items-center text-white/70 py-10"><Loader2 className="w-8 h-8 animate-spin mb-2" /><span>Memproses Halaman PDF...</span></div> : null}
+                                {pdfDoc && numPages > 0 && ( 
+                                    <div className="w-full space-y-4">{Array.from(new Array(numPages), (el, index) => ( <PDFPage key={index} pdf={pdfDoc} pageNum={index + 1} /> ))}</div> 
+                                )}
+                                {!isPdfLoading && !pdfDoc && ( <div className="text-red-400">Gagal memuat PDF.</div> )}
+                            </div>
+                        )
                     )}
                  </div>
              </div>

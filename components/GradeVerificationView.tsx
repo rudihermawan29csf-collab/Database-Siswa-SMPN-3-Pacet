@@ -11,6 +11,31 @@ interface GradeVerificationViewProps {
   onUpdate?: () => void;
 }
 
+// Reuse helper locally or import (defined locally for now)
+const getDriveUrl = (url: string, type: 'preview' | 'direct') => {
+    if (!url) return '';
+    if (url.startsWith('blob:')) return url;
+
+    if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
+        let id = '';
+        const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            id = match[1];
+        } else {
+            try {
+                const urlObj = new URL(url);
+                id = urlObj.searchParams.get('id') || '';
+            } catch (e) {}
+        }
+
+        if (id) {
+            if (type === 'preview') return `https://drive.google.com/file/d/${id}/preview`;
+            if (type === 'direct') return `https://drive.google.com/uc?export=view&id=${id}`;
+        }
+    }
+    return url;
+};
+
 const GradeVerificationView: React.FC<GradeVerificationViewProps> = ({ students, onUpdate }) => {
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
@@ -31,6 +56,7 @@ const GradeVerificationView: React.FC<GradeVerificationViewProps> = ({ students,
   // PDF/Image States
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const [useFallbackViewer, setUseFallbackViewer] = useState(false);
 
   const uniqueClasses = Array.from(new Set(students.map(s => s.className))).sort();
   const studentsInClass = students.filter(s => s.className === selectedClass);
@@ -45,13 +71,20 @@ const GradeVerificationView: React.FC<GradeVerificationViewProps> = ({ students,
 
   useEffect(() => { if (uniqueClasses.length > 0 && !selectedClass) setSelectedClass(uniqueClasses[0]); }, [uniqueClasses]);
   useEffect(() => { if (studentsInClass.length > 0 && !selectedStudentId) setSelectedStudentId(studentsInClass[0].id); }, [studentsInClass]);
-  useEffect(() => { setZoomLevel(1.0); }, [activePage, activeSemester, selectedStudentId]);
+  useEffect(() => { setZoomLevel(1.0); setUseFallbackViewer(false); }, [activePage, activeSemester, selectedStudentId]);
 
   // Document Loading
   useEffect(() => {
     const loadPdf = async () => {
-        setPdfDoc(null); setIsPdfLoading(false);
+        setPdfDoc(null); setIsPdfLoading(false); setUseFallbackViewer(false);
         if (!currentDoc) return;
+
+        // Drive URL Check - Force fallback/iframe
+        if (currentDoc.url.includes('drive.google.com') || currentDoc.url.includes('docs.google.com')) {
+            setUseFallbackViewer(true);
+            return;
+        }
+
         if (currentDoc.type === 'PDF' || currentDoc.name.toLowerCase().endsWith('.pdf')) {
             setIsPdfLoading(true);
             try {
@@ -62,10 +95,19 @@ const GradeVerificationView: React.FC<GradeVerificationViewProps> = ({ students,
                     pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
                 }
 
-                const loadingTask = pdfjs.getDocument(currentDoc.url);
+                // FIX: Fetch data in main thread and pass ArrayBuffer to worker
+                const response = await fetch(currentDoc.url);
+                if (!response.ok) throw new Error("Network error");
+                const arrayBuffer = await response.arrayBuffer();
+                
+                const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
                 const pdf = await loadingTask.promise;
                 setPdfDoc(pdf); setIsPdfLoading(false);
-            } catch (error) { setIsPdfLoading(false); }
+            } catch (error) { 
+                console.error("PDF Load Error, switching to fallback", error);
+                setUseFallbackViewer(true);
+                setIsPdfLoading(false); 
+            }
         }
     };
     loadPdf();
@@ -93,13 +135,20 @@ const GradeVerificationView: React.FC<GradeVerificationViewProps> = ({ students,
                       const context = canvas.getContext('2d');
                       canvas.height = viewport.height;
                       canvas.width = viewport.width;
-                      page.render({ canvasContext: context, viewport }).promise;
+                      
+                      const renderContext = {
+                          canvasContext: context,
+                          viewport: viewport,
+                      };
+                      page.render(renderContext).promise;
                   }
               });
           }
       }, [pdf, pageNum, scale]);
-      return <canvas ref={canvasRef} />;
+      return <canvas ref={canvasRef} className="shadow-lg bg-white" />;
   };
+
+  const isDriveUrl = currentDoc && (currentDoc.url.includes('drive.google.com') || currentDoc.url.includes('docs.google.com'));
 
   return (
     <div className="flex flex-col h-full animate-fade-in relative">
@@ -178,8 +227,20 @@ const GradeVerificationView: React.FC<GradeVerificationViewProps> = ({ students,
                  </div>
                  <div className="flex-1 overflow-auto p-4 bg-gray-900/50 flex items-start justify-center">
                      {currentDoc ? (
-                         <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}>
-                             {currentDoc.type === 'IMAGE' ? <img src={currentDoc.url} className="max-w-full h-auto rounded" /> : <div className="bg-white min-h-[600px] min-w-[400px] p-10">{isPdfLoading ? <Loader2 className="animate-spin" /> : (pdfDoc && <PDFPageCanvas pdf={pdfDoc} pageNum={1} scale={1.5} />)}</div>}
+                         <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', width: '100%', height: '100%', display: 'flex', justifyContent: 'center' }}>
+                             {(useFallbackViewer || isDriveUrl) ? (
+                                <iframe src={getDriveUrl(currentDoc.url, 'preview')} className="w-full h-[800px] border-none bg-white rounded" title="Viewer" />
+                             ) : (
+                                currentDoc.type === 'IMAGE' ? (
+                                    <img src={getDriveUrl(currentDoc.url, 'direct')} className="max-w-full h-auto rounded" /> 
+                                ) : (
+                                    <div className="bg-white min-h-[600px] w-full max-w-[800px] flex items-center justify-center relative">
+                                        {isPdfLoading ? <Loader2 className="animate-spin w-10 h-10 text-blue-500" /> : (
+                                            pdfDoc ? <PDFPageCanvas pdf={pdfDoc} pageNum={1} scale={1.0} /> : <div className="text-red-500">Gagal memuat PDF</div>
+                                        )}
+                                    </div>
+                                )
+                             )}
                          </div>
                      ) : <div className="text-gray-500 mt-20">Halaman {activePage} belum diupload.</div>}
                  </div>

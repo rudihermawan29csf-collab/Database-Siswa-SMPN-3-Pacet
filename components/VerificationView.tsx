@@ -23,6 +23,64 @@ const DOCUMENT_TYPES = [
   { id: 'FOTO', label: 'Pas Foto' },
 ];
 
+// Helper to format Drive URLs
+const getDriveUrl = (url: string, type: 'preview' | 'direct') => {
+    if (!url) return '';
+    if (url.startsWith('blob:')) return url; // Local blobs
+
+    if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
+        let id = '';
+        const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            id = match[1];
+        } else {
+            try {
+                const urlObj = new URL(url);
+                id = urlObj.searchParams.get('id') || '';
+            } catch (e) {}
+        }
+
+        if (id) {
+            // Always return preview for iframe usage, it's the most reliable
+            if (type === 'preview') return `https://drive.google.com/file/d/${id}/preview`;
+            if (type === 'direct') return `https://drive.google.com/uc?export=view&id=${id}`;
+        }
+    }
+    return url;
+};
+
+// Helper Component for PDF Rendering
+const PDFPageCanvas = ({ pdf, pageNum, scale }: { pdf: any, pageNum: number, scale: number }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        let isCancelled = false;
+        if (pdf && canvasRef.current) {
+            pdf.getPage(pageNum).then((page: any) => {
+                if(isCancelled) return;
+                const viewport = page.getViewport({ scale });
+                const canvas = canvasRef.current;
+                if (canvas) {
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport,
+                    };
+                    page.render(renderContext).promise.catch((err: any) => {
+                        if(!isCancelled) console.error("Page render error:", err);
+                    });
+                }
+            }).catch((err: any) => console.error("Get page error:", err));
+        }
+        return () => { isCancelled = true; };
+    }, [pdf, pageNum, scale]);
+
+    return <canvas ref={canvasRef} className="shadow-lg bg-white" />;
+};
+
 const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStudentId, onUpdate }) => {
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
@@ -33,8 +91,6 @@ const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStu
 
   // Edit Mode State
   const [isEditing, setIsEditing] = useState(false);
-  // We manipulate the 'currentStudent' object directly in memory for this demo. 
-  // In real app, you'd want a local copy of form state.
 
   // Logic States
   const [forceUpdate, setForceUpdate] = useState(0);
@@ -46,6 +102,7 @@ const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStu
   const [pdfError, setPdfError] = useState(false);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
+  const [useFallbackViewer, setUseFallbackViewer] = useState(false);
 
   const uniqueClasses = Array.from(new Set(students.map(s => s.className))).sort();
   const studentsInClass = students.filter(s => s.className === selectedClass);
@@ -60,7 +117,10 @@ const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStu
     } else if (studentsInClass.length > 0 && !selectedStudentId) { setSelectedStudentId(studentsInClass[0].id); }
   }, [targetStudentId, selectedClass, students]);
 
-  useEffect(() => setZoomLevel(1.0), [selectedStudentId, activeDocType]);
+  useEffect(() => {
+      setZoomLevel(1.0);
+      setUseFallbackViewer(false);
+  }, [selectedStudentId, activeDocType]);
   
   // Helper to update student data (mock)
   const handleDataChange = (path: string, value: string) => {
@@ -97,12 +157,22 @@ const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStu
       <div className="bg-gray-100 px-2 py-1 text-[10px] font-bold text-gray-700 uppercase border-y border-gray-200 mt-4 mb-2 first:mt-0">{title}</div>
   );
 
-  // ... PDF Logic omitted for brevity (same as before) ...
   useEffect(() => {
     const loadPdf = async () => {
         setPdfDoc(null);
         setIsPdfLoading(false);
+        setPdfError(false);
+        setUseFallbackViewer(false);
+
         if (!currentStudent || !currentDoc) return;
+
+        // Check if it's a Drive URL - if so, we skip PDF.js and use iframe for EVERYTHING (Images & PDFs)
+        if (currentDoc.url.includes('drive.google.com') || currentDoc.url.includes('docs.google.com')) {
+            setUseFallbackViewer(true);
+            return;
+        }
+
+        // Only try PDF.js if it is a local/direct PDF and NOT a Drive link
         if (currentDoc.type === 'PDF' || currentDoc.name.toLowerCase().endsWith('.pdf')) {
             setIsPdfLoading(true);
             try {
@@ -113,10 +183,19 @@ const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStu
                     pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
                 }
 
-                const loadingTask = pdfjs.getDocument(currentDoc.url);
+                // FIX: Fetch data in main thread and pass ArrayBuffer to worker
+                const response = await fetch(currentDoc.url);
+                if (!response.ok) throw new Error("Network response was not ok");
+                const arrayBuffer = await response.arrayBuffer();
+
+                const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
                 const pdf = await loadingTask.promise;
                 setPdfDoc(pdf); setNumPages(pdf.numPages); setIsPdfLoading(false);
-            } catch (error) { setPdfError(true); setIsPdfLoading(false); }
+            } catch (error) { 
+                console.error("Error loading PDF, trying fallback:", error);
+                setUseFallbackViewer(true);
+                setIsPdfLoading(false); 
+            }
         }
     };
     loadPdf();
@@ -178,6 +257,8 @@ const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStu
           default: return null;
       }
   };
+
+  const isDriveUrl = currentDoc && (currentDoc.url.includes('drive.google.com') || currentDoc.url.includes('docs.google.com'));
 
   return (
     <div className="flex flex-col h-full animate-fade-in relative">
@@ -244,8 +325,21 @@ const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStu
                  </div>
                  <div className="flex-1 overflow-auto p-8 bg-gray-900/50 flex items-start justify-center">
                      {currentDoc ? (
-                         <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}>
-                             {currentDoc.type === 'IMAGE' ? <img src={currentDoc.url} className="max-w-full h-auto rounded" /> : <div className="bg-white p-10">PDF Viewer Placeholder</div>}
+                         <div style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', width: '100%', height: '100%', display: 'flex', justifyContent: 'center' }}>
+                             {/* Unified Viewer: If Drive Link (OR Fallback triggered), show Iframe. Else Show Image/PDF Canvas */}
+                             {(useFallbackViewer || isDriveUrl) ? (
+                                 <iframe src={getDriveUrl(currentDoc.url, 'preview')} className="w-full h-[800px] border-none rounded bg-white" title="Document Viewer" />
+                             ) : (
+                                 currentDoc.type === 'IMAGE' ? (
+                                     <img src={currentDoc.url} className="max-w-full h-auto rounded shadow-sm" alt="Document" /> 
+                                 ) : (
+                                     <div className="bg-white min-h-[600px] w-full max-w-[800px] flex items-center justify-center relative">
+                                        {isPdfLoading ? <Loader2 className="animate-spin w-10 h-10 text-blue-500" /> : (
+                                            pdfDoc ? <PDFPageCanvas pdf={pdfDoc} pageNum={1} scale={1.0} /> : <div className="text-red-500">{pdfError ? 'Gagal memuat PDF' : 'PDF Viewer'}</div>
+                                        )}
+                                     </div>
+                                 )
+                             )}
                          </div>
                      ) : <div className="text-gray-500 mt-20">Belum ada dokumen.</div>}
                  </div>
