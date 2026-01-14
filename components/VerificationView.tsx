@@ -204,54 +204,125 @@ const VerificationView: React.FC<VerificationViewProps> = ({ students, targetStu
   const handleApprove = () => { if (currentDoc) { currentDoc.status = 'APPROVED'; currentDoc.adminNote = 'Dokumen valid.'; setForceUpdate(prev => prev + 1); if (onUpdate) onUpdate(); } };
   const confirmReject = () => { if (currentDoc) { currentDoc.status = 'REVISION'; currentDoc.adminNote = rejectionNote; setRejectModalOpen(false); setForceUpdate(prev => prev + 1); if (onUpdate) onUpdate(); } };
 
-  // --- RENDER TABS ---
+  // --- RENDER TABS (SYNCED WITH BUKU INDUK) ---
   const renderDataTab = () => {
       if (!currentStudent) return null;
       switch(activeDataTab) {
           case 'DAPO_PRIBADI': return (
               <div className="space-y-1">
                   <SectionHeader title="Identitas Peserta Didik" />
-                  <FieldGroup label="Nama Lengkap" value={currentStudent.fullName} path="fullName" fullWidth />
+                  <FieldGroup label="1. Nama Lengkap" value={currentStudent.fullName} path="fullName" fullWidth />
                   <div className="grid grid-cols-2 gap-2">
-                      <FieldGroup label="NISN" value={currentStudent.nisn} path="nisn" />
-                      <FieldGroup label="NIS" value={currentStudent.nis} path="nis" />
+                      <FieldGroup label="2. Jenis Kelamin" value={currentStudent.gender === 'L' ? 'Laki-Laki' : 'Perempuan'} path="gender" />
+                      <FieldGroup label="3. NISN" value={currentStudent.nisn} path="nisn" />
                   </div>
-                  <FieldGroup label="Tempat Lahir" value={currentStudent.birthPlace} path="birthPlace" fullWidth />
-                  <FieldGroup label="Tanggal Lahir" value={currentStudent.birthDate} path="birthDate" fullWidth />
-                  <SectionHeader title="Data Akademik" />
-                  <FieldGroup label="No Seri Ijazah" value={currentStudent.diplomaNumber} path="diplomaNumber" fullWidth />
-                  <FieldGroup label="No Seri SKHUN" value={currentStudent.dapodik.skhun} path="dapodik.skhun" fullWidth />
+                  <div className="grid grid-cols-2 gap-2">
+                      <FieldGroup label="NIS" value={currentStudent.nis} path="nis" />
+                      <FieldGroup label="7. NIK" value={currentStudent.dapodik.nik} path="dapodik.nik" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                      <FieldGroup label="8. Tempat Lahir" value={currentStudent.birthPlace} path="birthPlace" />
+                      <FieldGroup label="Tgl Lahir" value={currentStudent.birthDate} path="birthDate" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                      <FieldGroup label="9. Agama" value={currentStudent.religion} path="religion" />
+                      <FieldGroup label="10. ABK" value={currentStudent.dapodik.specialNeeds} path="dapodik.specialNeeds" />
+                  </div>
+                  
+                  <SectionHeader title="Data Akademik & Registrasi" />
+                  <FieldGroup label="4. No Seri Ijazah" value={currentStudent.diplomaNumber} path="diplomaNumber" fullWidth />
+                  <FieldGroup label="5. No Seri SKHUN" value={currentStudent.dapodik.skhun} path="dapodik.skhun" fullWidth />
+                  <FieldGroup label="6. No Peserta UN" value={currentStudent.dapodik.unExamNumber} path="dapodik.unExamNumber" fullWidth />
+                  <FieldGroup label="Sekolah Asal" value={currentStudent.previousSchool} path="previousSchool" fullWidth />
+                  <FieldGroup label="No Reg Akta Lahir" value={currentStudent.dapodik.birthRegNumber} path="dapodik.birthRegNumber" fullWidth />
               </div>
           );
           case 'DAPO_ALAMAT': return (
               <div className="space-y-1">
-                  <SectionHeader title="Alamat" />
+                  <SectionHeader title="11. Alamat Tempat Tinggal" />
                   <FieldGroup label="Alamat Jalan" value={currentStudent.address} path="address" fullWidth />
                   <div className="grid grid-cols-2 gap-2">
                     <FieldGroup label="RT" value={currentStudent.dapodik.rt} path="dapodik.rt" />
                     <FieldGroup label="RW" value={currentStudent.dapodik.rw} path="dapodik.rw" />
                   </div>
                   <FieldGroup label="Dusun" value={currentStudent.dapodik.dusun} path="dapodik.dusun" />
-                  <FieldGroup label="Desa/Kel" value={currentStudent.dapodik.kelurahan} path="dapodik.kelurahan" />
-                  <FieldGroup label="Kecamatan" value={currentStudent.subDistrict} path="subDistrict" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="Kelurahan/Desa" value={currentStudent.dapodik.kelurahan} path="dapodik.kelurahan" />
+                    <FieldGroup label="Kecamatan" value={currentStudent.subDistrict} path="subDistrict" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="Kabupaten" value={currentStudent.district} path="district" />
+                    <FieldGroup label="Kode Pos" value={currentStudent.postalCode} path="postalCode" />
+                  </div>
+                  <FieldGroup label="Lintang / Bujur" value={`${currentStudent.dapodik.latitude} / ${currentStudent.dapodik.longitude}`} path="dapodik.latitude" fullWidth />
+                  
+                  <SectionHeader title="Kontak & Lainnya" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="12. Transportasi" value={currentStudent.dapodik.transportation} path="dapodik.transportation" />
+                    <FieldGroup label="13. Jenis Tinggal" value={currentStudent.dapodik.livingStatus} path="dapodik.livingStatus" />
+                  </div>
+                  <FieldGroup label="14. No HP" value={currentStudent.father.phone || currentStudent.mother.phone} path="father.phone" fullWidth />
+                  <FieldGroup label="15. Email" value={currentStudent.dapodik.email} path="dapodik.email" fullWidth />
               </div>
           );
           case 'DAPO_ORTU': return (
               <div className="space-y-1">
-                  <SectionHeader title="Ayah" />
+                  <SectionHeader title="18. Data Ayah Kandung" />
                   <FieldGroup label="Nama Ayah" value={currentStudent.father.name} path="father.name" fullWidth />
-                  <FieldGroup label="NIK Ayah" value={currentStudent.father.nik} path="father.nik" />
-                  <SectionHeader title="Ibu" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="NIK Ayah" value={currentStudent.father.nik} path="father.nik" />
+                    <FieldGroup label="Tahun Lahir" value={currentStudent.father.birthPlaceDate} path="father.birthPlaceDate" />
+                  </div>
+                  <FieldGroup label="Pendidikan" value={currentStudent.father.education} path="father.education" fullWidth />
+                  <FieldGroup label="Pekerjaan" value={currentStudent.father.job} path="father.job" fullWidth />
+                  <FieldGroup label="Penghasilan" value={currentStudent.father.income} path="father.income" fullWidth />
+
+                  <SectionHeader title="19. Data Ibu Kandung" />
                   <FieldGroup label="Nama Ibu" value={currentStudent.mother.name} path="mother.name" fullWidth />
-                  <FieldGroup label="NIK Ibu" value={currentStudent.mother.nik} path="mother.nik" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="NIK Ibu" value={currentStudent.mother.nik} path="mother.nik" />
+                    <FieldGroup label="Tahun Lahir" value={currentStudent.mother.birthPlaceDate} path="mother.birthPlaceDate" />
+                  </div>
+                  <FieldGroup label="Pendidikan" value={currentStudent.mother.education} path="mother.education" fullWidth />
+                  <FieldGroup label="Pekerjaan" value={currentStudent.mother.job} path="mother.job" fullWidth />
+                  <FieldGroup label="Penghasilan" value={currentStudent.mother.income} path="mother.income" fullWidth />
+                  
+                  <SectionHeader title="20. Data Wali" />
+                  <FieldGroup label="Nama Wali" value={currentStudent.guardian?.name} path="guardian.name" fullWidth />
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="Tahun Lahir" value={currentStudent.guardian?.birthPlaceDate} path="guardian.birthPlaceDate" />
+                    <FieldGroup label="Pekerjaan" value={currentStudent.guardian?.job} path="guardian.job" />
+                  </div>
               </div>
           );
            case 'DAPO_KIP': return (
               <div className="space-y-1">
                   <SectionHeader title="Kesejahteraan" />
-                  <FieldGroup label="Penerima KIP" value={currentStudent.dapodik.kipReceiver} path="dapodik.kipReceiver" />
-                  <FieldGroup label="Nomor KIP" value={currentStudent.dapodik.kipNumber} path="dapodik.kipNumber" />
+                  <FieldGroup label="16. No KKS" value={currentStudent.dapodik.kksNumber} path="dapodik.kksNumber" fullWidth />
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="17. Penerima KPS" value={currentStudent.dapodik.kpsReceiver} path="dapodik.kpsReceiver" />
+                    <FieldGroup label="No KPS" value={currentStudent.dapodik.kpsNumber} path="dapodik.kpsNumber" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="Usulan PIP" value={currentStudent.dapodik.pipEligible} path="dapodik.pipEligible" />
+                    <FieldGroup label="Alasan PIP" value={currentStudent.dapodik.pipReason} path="dapodik.pipReason" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="Penerima KIP" value={currentStudent.dapodik.kipReceiver} path="dapodik.kipReceiver" />
+                    <FieldGroup label="No KIP" value={currentStudent.dapodik.kipNumber} path="dapodik.kipNumber" />
+                  </div>
                   <FieldGroup label="Nama di KIP" value={currentStudent.dapodik.kipName} path="dapodik.kipName" fullWidth />
+                  
+                  <SectionHeader title="Data Periodik" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="21. Tinggi (cm)" value={currentStudent.height} path="height" />
+                    <FieldGroup label="Berat (kg)" value={currentStudent.weight} path="weight" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldGroup label="22. Jarak (km)" value={currentStudent.dapodik.distanceToSchool} path="dapodik.distanceToSchool" />
+                    <FieldGroup label="23. Waktu Tempuh" value={currentStudent.dapodik.travelTimeMinutes} path="dapodik.travelTimeMinutes" />
+                  </div>
+                  <FieldGroup label="24. Jml Sdr Kandung" value={currentStudent.siblingCount} path="siblingCount" fullWidth />
               </div>
           );
           default: return null;

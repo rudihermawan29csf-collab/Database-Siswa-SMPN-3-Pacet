@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Student, AcademicRecord } from '../types';
-import { Search, FileSpreadsheet, Download, UploadCloud, Trash2, Save, Pencil, X, CheckCircle2, Loader2, LayoutList, ArrowLeft, Printer } from 'lucide-react';
+import { Search, FileSpreadsheet, Download, UploadCloud, Trash2, Save, Pencil, X, CheckCircle2, Loader2, LayoutList, ArrowLeft, Printer, FileDown } from 'lucide-react';
 
 interface GradesViewProps {
   students: Student[];
@@ -18,6 +18,19 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
   const [dbSemester, setDbSemester] = useState<number>(1);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [renderKey, setRenderKey] = useState(0); // Force re-render
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  // Configuration State
+  const [classConfig, setClassConfig] = useState<Record<string, { teacher: string, nip: string }>>({});
+  const [p5Config, setP5Config] = useState<Record<string, { theme: string, description: string }[]>>({});
+  
+  interface AcademicData {
+      year: string;
+      semesterYears?: Record<number, string>;
+      semesterDates?: Record<number, string>; // Add dates mapping
+      reportDate?: string; // Fallback
+  }
+  const [academicData, setAcademicData] = useState<AcademicData>({ year: '2024/2025' });
 
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -28,6 +41,18 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importStats, setImportStats] = useState<{ processed: number, success: number } | null>(null);
+
+  // Load Configs
+  useEffect(() => {
+      const savedClassConfig = localStorage.getItem('sys_class_config');
+      if (savedClassConfig) setClassConfig(JSON.parse(savedClassConfig));
+
+      const savedP5Config = localStorage.getItem('sys_p5_config');
+      if (savedP5Config) setP5Config(JSON.parse(savedP5Config));
+
+      const savedAcademic = localStorage.getItem('sys_academic_data');
+      if (savedAcademic) setAcademicData(JSON.parse(savedAcademic));
+  }, []);
 
   const SUBJECT_MAP = [
       { key: 'PAI', label: 'PAI', full: 'Pendidikan Agama dan Budi Pekerti' },
@@ -63,9 +88,28 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
 
   const setScore = (s: Student, subjKey: string, val: number) => {
       if (!s.academicRecords) s.academicRecords = {};
+      
+      // Initialize record if it doesn't exist for the selected semester
       if (!s.academicRecords[dbSemester]) {
-          s.academicRecords[dbSemester] = { semester: dbSemester, classLevel: 'VII', phase: 'D', year: '2024', subjects: [], p5Projects: [], extracurriculars: [], teacherNote: '', promotionStatus: '', attendance: { sick: 0, permitted: 0, noReason: 0 } };
+          // Determine Class Level based on Semester
+          let level = 'VII';
+          if (dbSemester === 3 || dbSemester === 4) level = 'VIII';
+          if (dbSemester === 5 || dbSemester === 6) level = 'IX';
+
+          s.academicRecords[dbSemester] = { 
+              semester: dbSemester, 
+              classLevel: level, 
+              phase: 'D', 
+              year: '2024', 
+              subjects: [], 
+              p5Projects: [], 
+              extracurriculars: [], 
+              teacherNote: '', 
+              promotionStatus: '', 
+              attendance: { sick: 0, permitted: 0, noReason: 0 } 
+          };
       }
+
       const record = s.academicRecords[dbSemester];
       let subj = record.subjects.find(sub => sub.subject.startsWith(subjKey) || (subjKey === 'PAI' && sub.subject.includes('Agama')));
       
@@ -78,7 +122,7 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
 
   // --- DELETE FUNCTION (FIXED) ---
   const handleDeleteRow = (student: Student) => {
-      if (window.confirm("apakah anda yakin menghapus?")) {
+      if (window.confirm(`Apakah Anda yakin menghapus nilai Semester ${dbSemester} untuk siswa ini?`)) {
           SUBJECT_MAP.forEach(sub => setScore(student, sub.key, 0));
           setRenderKey(prev => prev + 1); 
           alert("Data nilai berhasil dihapus (Reset ke 0).");
@@ -148,6 +192,40 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
       } catch (error) {
           console.error("Download failed:", error);
           alert("Gagal mendownload template. Cek console browser untuk detail error.");
+      }
+  };
+
+  // --- DOWNLOAD PDF F4 ---
+  const handleDownloadF4 = () => {
+      if (!selectedStudent) return;
+      setIsGeneratingPdf(true);
+
+      const element = document.getElementById('report-content');
+      const fileName = `Rapor_${selectedStudent.fullName.replace(/\s+/g, '_')}_Sem${dbSemester}_F4.pdf`;
+
+      // Optimasi ukuran agar tidak terpotong (width 190mm + margin 10mm left + 10mm right = 210mm < 215mm F4)
+      const opt = {
+          margin: [5, 10, 5, 10], // Margin atas, kiri, bawah, kanan (mm)
+          filename: fileName,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+          // F4 size is roughly 215mm x 330mm
+          jsPDF: { unit: 'mm', format: [215, 330], orientation: 'portrait' } 
+      };
+
+      // @ts-ignore
+      if (window.html2pdf) {
+          // @ts-ignore
+          window.html2pdf().set(opt).from(element).save().then(() => {
+              setIsGeneratingPdf(false);
+          }).catch((err: any) => {
+              console.error(err);
+              setIsGeneratingPdf(false);
+              alert("Gagal membuat PDF.");
+          });
+      } else {
+          alert("Library PDF belum siap.");
+          setIsGeneratingPdf(false);
       }
   };
 
@@ -251,17 +329,45 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
       const subjects = record?.subjects || [];
       const getSubjData = (key: string) => subjects.find(s => s.subject.includes(key) || (key === 'PAI' && s.subject.includes('Agama')));
 
+      // --- DYNAMIC DATA LOGIC ---
+      // 1. Determine Academic Year from Settings (Specific Semester Year OR Fallback to global)
+      const currentYear = academicData.semesterYears?.[dbSemester] || academicData.year || '2024/2025';
+
+      // 2. Determine Report Date (Specific Semester Date OR Fallback to global)
+      const rawReportDate = academicData.semesterDates?.[dbSemester] || academicData.reportDate || '2024-12-20';
+      const formatReportDate = (dateStr: string) => {
+          if (!dateStr) return '';
+          try {
+              return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+          } catch(e) { return dateStr; }
+      };
+      const titimangsaDate = formatReportDate(rawReportDate);
+
+      // 3. Determine Wali Kelas from Config (Format: YEAR-SEMESTER-CLASS)
+      const configKey = `${currentYear}-${dbSemester}-${student.className}`;
+      const waliInfo = classConfig[configKey] || { teacher: '#N/A', nip: '-' };
+
+      // 4. Determine P5 Data from Config
+      // Level derivation
+      let level = 'VII';
+      if (student.className.includes('VIII')) level = 'VIII';
+      if (student.className.includes('IX')) level = 'IX';
+      
+      const p5Key = `${currentYear}-${level}-${dbSemester}`;
+      const p5Data = p5Config[p5Key] || [];
+
       return (
-          <div className="bg-white p-8 shadow-lg max-w-[210mm] mx-auto min-h-[297mm] text-black font-serif text-sm leading-tight">
+          // Adjusted width to 190mm to ensure it fits within 215mm width minus margins (10mm left + 10mm right)
+          <div id="report-content" className="bg-white p-6 shadow-lg w-[190mm] min-h-[330mm] mx-auto text-black font-serif text-xs leading-tight box-border relative">
                 {/* Header */}
-                <div className="mb-6 font-bold text-sm">
+                <div className="mb-4 font-bold text-xs">
                     <table className="w-full">
                         <tbody>
                             <tr>
-                                <td className="w-40 py-0.5">Nama Peserta Didik</td>
+                                <td className="w-32 py-0.5">Nama Peserta Didik</td>
                                 <td className="py-0.5">: {student.fullName}</td>
-                                <td className="w-24 py-0.5">Semester</td>
-                                <td className="py-0.5">: {dbSemester} (Satu)</td>
+                                <td className="w-20 py-0.5">Semester</td>
+                                <td className="py-0.5">: {dbSemester} ({dbSemester % 2 !== 0 ? 'Ganjil' : 'Genap'})</td>
                             </tr>
                             <tr>
                                 <td className="py-0.5">Kelas</td>
@@ -273,7 +379,7 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                                 <td className="py-0.5">Sekolah</td>
                                 <td className="py-0.5">: SMPN 3 PACET</td>
                                 <td className="py-0.5">Tahun</td>
-                                <td className="py-0.5">: 2024-2025</td>
+                                <td className="py-0.5">: {currentYear}</td>
                             </tr>
                             <tr>
                                 <td className="py-0.5 align-top">Alamat</td>
@@ -284,14 +390,14 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                 </div>
 
                 {/* A. Intrakurikuler */}
-                <h3 className="font-bold mb-2">A. INTRAKURIKULER</h3>
-                <table className="w-full border-collapse border border-black mb-6 text-xs">
+                <h3 className="font-bold mb-1 text-xs">A. INTRAKURIKULER</h3>
+                <table className="w-full border-collapse border border-black mb-4 text-[10px]">
                     <thead>
                         <tr className="bg-white text-center font-bold">
-                            <td className="border border-black p-2 w-10">NO</td>
-                            <td className="border border-black p-2">MATA PELAJARAN</td>
-                            <td className="border border-black p-2 w-20">NILAI AKHIR</td>
-                            <td className="border border-black p-2">CAPAIAN KOMPETENSI</td>
+                            <td className="border border-black p-1 w-8">NO</td>
+                            <td className="border border-black p-1">MATA PELAJARAN</td>
+                            <td className="border border-black p-1 w-16">NILAI AKHIR</td>
+                            <td className="border border-black p-1">CAPAIAN KOMPETENSI</td>
                         </tr>
                     </thead>
                     <tbody>
@@ -302,18 +408,18 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                                 return (
                                     <React.Fragment key={sub.key}>
                                         <tr>
-                                            <td className="border border-black p-2 text-center align-top">{idx + 1}</td>
-                                            <td className="border border-black p-2">
+                                            <td className="border border-black p-1 text-center align-top">{idx + 1}</td>
+                                            <td className="border border-black p-1">
                                                 <div>Seni dan Prakarya</div>
                                                 <div className="pl-4">a. Seni Musik</div>
                                                 <div className="pl-4">b. Seni Rupa</div>
                                             </td>
-                                            <td className="border border-black p-2 text-center align-top font-bold">
-                                                <div className="mb-4"></div>
+                                            <td className="border border-black p-1 text-center align-top font-bold">
+                                                <div className="mb-2"></div>
                                                 <div>{data?.score || '#N/A'}</div>
                                             </td>
-                                            <td className="border border-black p-2 italic align-top">
-                                                <div className="mb-4"></div>
+                                            <td className="border border-black p-1 italic align-top">
+                                                <div className="mb-2"></div>
                                                 <div>{data?.competency || '#N/A'}</div>
                                             </td>
                                         </tr>
@@ -323,67 +429,58 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                              if (sub.key === 'Bahasa Jawa') {
                                 return (
                                     <tr key={sub.key}>
-                                        <td className="border border-black p-2 text-center"></td>
-                                        <td className="border border-black p-2 pl-4">a. Bahasa Jawa</td>
-                                        <td className="border border-black p-2 text-center font-bold">{data?.score || '#N/A'}</td>
-                                        <td className="border border-black p-2 italic">{data?.competency || '#N/A'}</td>
+                                        <td className="border border-black p-1 text-center"></td>
+                                        <td className="border border-black p-1 pl-4">a. Bahasa Jawa</td>
+                                        <td className="border border-black p-1 text-center font-bold">{data?.score || '#N/A'}</td>
+                                        <td className="border border-black p-1 italic">{data?.competency || '#N/A'}</td>
                                     </tr>
                                 )
                             }
                             return (
                                 <tr key={sub.key}>
-                                    <td className="border border-black p-2 text-center">{idx + 1}</td>
-                                    <td className="border border-black p-2">{sub.full}</td>
-                                    <td className="border border-black p-2 text-center font-bold">{data?.score || '#N/A'}</td>
-                                    <td className="border border-black p-2 italic">{data?.competency || '#N/A'}</td>
+                                    <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                    <td className="border border-black p-1">{sub.full}</td>
+                                    <td className="border border-black p-1 text-center font-bold">{data?.score || '#N/A'}</td>
+                                    <td className="border border-black p-1 italic">{data?.competency || '#N/A'}</td>
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
 
-                {/* B. P5 */}
-                <h3 className="font-bold mb-2">B. DESKRIPSI NILAI P5</h3>
-                <table className="w-full border-collapse border border-black mb-6 text-xs">
+                {/* B. P5 - DYNAMIC FROM CONFIG */}
+                <h3 className="font-bold mb-1 text-xs">B. DESKRIPSI NILAI P5</h3>
+                <table className="w-full border-collapse border border-black mb-4 text-[10px]">
                     <thead>
                         <tr className="bg-white text-center font-bold">
-                            <td className="border border-black p-2 w-10">NO</td>
-                            <td className="border border-black p-2">TEMA</td>
-                            <td className="border border-black p-2">DESKRIPSI</td>
+                            <td className="border border-black p-1 w-8">NO</td>
+                            <td className="border border-black p-1">TEMA</td>
+                            <td className="border border-black p-1">DESKRIPSI</td>
                         </tr>
                     </thead>
                     <tbody>
-                        {record?.p5Projects && record.p5Projects.length > 0 ? record.p5Projects.map((p5, idx) => (
+                        {p5Data.length > 0 ? p5Data.map((p5, idx) => (
                             <tr key={idx}>
-                                <td className="border border-black p-2 text-center">{idx + 1}</td>
-                                <td className="border border-black p-2">{p5.theme}</td>
-                                <td className="border border-black p-2">{p5.description}</td>
+                                <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                <td className="border border-black p-1">{p5.theme}</td>
+                                <td className="border border-black p-1">{p5.description}</td>
                             </tr>
                         )) : (
-                            <>
-                                <tr>
-                                    <td className="border border-black p-2 text-center">1</td>
-                                    <td className="border border-black p-2">Berekayasa dan Berteknologi untuk membangun NKRI</td>
-                                    <td className="border border-black p-2">Berkembang sesuai harapan</td>
-                                </tr>
-                                <tr>
-                                    <td className="border border-black p-2 text-center">2</td>
-                                    <td className="border border-black p-2">-</td>
-                                    <td className="border border-black p-2">-</td>
-                                </tr>
-                            </>
+                            <tr>
+                                <td className="border border-black p-1 text-center" colSpan={3}>Belum ada data Projek P5 untuk kelas ini.</td>
+                            </tr>
                         )}
                     </tbody>
                 </table>
 
                 {/* C. Ekstrakurikuler */}
-                <h3 className="font-bold mb-2">C. EKSTRAKURIKULER</h3>
-                <table className="w-full border-collapse border border-black mb-6 text-xs">
+                <h3 className="font-bold mb-1 text-xs">C. EKSTRAKURIKULER</h3>
+                <table className="w-full border-collapse border border-black mb-4 text-[10px]">
                     <thead>
                         <tr className="bg-white text-center font-bold">
-                            <td className="border border-black p-2 w-10">NO</td>
-                            <td className="border border-black p-2">KEGIATAN EKSTRAKURIKULER</td>
-                            <td className="border border-black p-2 w-32">PREDIKAT</td>
+                            <td className="border border-black p-1 w-8">NO</td>
+                            <td className="border border-black p-1">KEGIATAN EKSTRAKURIKULER</td>
+                            <td className="border border-black p-1 w-24">PREDIKAT</td>
                         </tr>
                     </thead>
                     <tbody>
@@ -391,9 +488,9 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                             const data = record?.extracurriculars?.find(e => e.name === ex);
                             return (
                                 <tr key={ex}>
-                                    <td className="border border-black p-2 text-center">{idx === 0 ? '1' : ''}</td>
-                                    <td className="border border-black p-2">{ex}</td>
-                                    <td className="border border-black p-2 text-center">{data?.score || '-'}</td>
+                                    <td className="border border-black p-1 text-center">{idx === 0 ? '1' : ''}</td>
+                                    <td className="border border-black p-1">{ex}</td>
+                                    <td className="border border-black p-1 text-center">{data?.score || '-'}</td>
                                 </tr>
                             );
                         })}
@@ -401,37 +498,37 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                 </table>
 
                 {/* D. Catatan & Ketidakhadiran */}
-                <div className="grid grid-cols-2 gap-6 mb-8">
+                <div className="grid grid-cols-2 gap-4 mb-4">
                     <div>
-                        <h3 className="font-bold mb-2">D. CATATAN WALI KELAS</h3>
-                        <div className="border border-black p-4 text-xs h-32 italic flex items-center justify-center text-center">
+                        <h3 className="font-bold mb-1 text-xs">D. CATATAN WALI KELAS</h3>
+                        <div className="border border-black p-2 text-[10px] h-24 italic flex items-center justify-center text-center">
                             {record?.teacherNote || "Niat yang tulus untuk belajar terlihat jelas dari usahamu mengikuti kegiatan belajar dengan baik."}
                         </div>
                         
-                        <div className="mt-4 border border-black p-2 text-xs">
+                        <div className="mt-2 border border-black p-2 text-[10px]">
                             <div className="font-bold mb-1">KENAIKAN KELAS</div>
-                            <div className="flex"><span className="w-24">Naik Kelas</span><span>: -</span></div>
-                            <div className="flex"><span className="w-24">Tanggal</span><span>: -</span></div>
+                            <div className="flex"><span className="w-20">Naik Kelas</span><span>: -</span></div>
+                            <div className="flex"><span className="w-20">Tanggal</span><span>: -</span></div>
                         </div>
                     </div>
                     <div>
-                        <h3 className="font-bold mb-2">KETIDAKHADIRAN</h3>
-                        <table className="w-full border-collapse border border-black text-xs">
+                        <h3 className="font-bold mb-1 text-xs">KETIDAKHADIRAN</h3>
+                        <table className="w-full border-collapse border border-black text-[10px]">
                             <tbody>
                                 <tr>
-                                    <td className="border border-black p-2">1. Sakit</td>
-                                    <td className="border border-black p-2 text-center w-16">{record?.attendance.sick ?? '#N/A'}</td>
-                                    <td className="border border-black p-2 w-16">Hari</td>
+                                    <td className="border border-black p-1">1. Sakit</td>
+                                    <td className="border border-black p-1 text-center w-12">{record?.attendance.sick ?? '#N/A'}</td>
+                                    <td className="border border-black p-1 w-12">Hari</td>
                                 </tr>
                                 <tr>
-                                    <td className="border border-black p-2">2. Ijin</td>
-                                    <td className="border border-black p-2 text-center">{record?.attendance.permitted ?? '#N/A'}</td>
-                                    <td className="border border-black p-2">Hari</td>
+                                    <td className="border border-black p-1">2. Ijin</td>
+                                    <td className="border border-black p-1 text-center">{record?.attendance.permitted ?? '#N/A'}</td>
+                                    <td className="border border-black p-1">Hari</td>
                                 </tr>
                                 <tr>
-                                    <td className="border border-black p-2">3. Tanpa Keterangan</td>
-                                    <td className="border border-black p-2 text-center">{record?.attendance.noReason ?? '#N/A'}</td>
-                                    <td className="border border-black p-2">Hari</td>
+                                    <td className="border border-black p-1">3. Tanpa Keterangan</td>
+                                    <td className="border border-black p-1 text-center">{record?.attendance.noReason ?? '#N/A'}</td>
+                                    <td className="border border-black p-1">Hari</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -439,26 +536,26 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                 </div>
 
                 {/* Signatures */}
-                <div className="flex justify-between text-xs mt-10 px-8 font-serif">
+                <div className="flex justify-between text-[10px] mt-6 px-4 font-serif">
                     <div className="text-center w-1/3">
-                        <p className="mb-20">Mengetahui,<br/>Orang Tua/Wali</p>
-                        <p className="font-bold border-t border-black px-4 pt-1 inline-block min-w-[150px]"></p>
+                        <p className="mb-12">Mengetahui,<br/>Orang Tua/Wali</p>
+                        <p className="font-bold border-t border-black px-4 pt-1 inline-block min-w-[120px]"></p>
                     </div>
                     
                     {/* Dummy Spacer */}
-                    <div className="w-10"></div>
+                    <div className="w-4"></div>
 
                     <div className="text-center w-1/3 relative">
-                        <p className="mb-1">Pacet, 20 Desember 2024</p>
-                        <p className="mb-16">WALI KELAS</p>
-                        <p className="font-bold underline decoration-1 underline-offset-2">#N/A</p>
-                        <p>NIP. -</p>
+                        <p className="mb-1">Pacet, {titimangsaDate}</p>
+                        <p className="mb-12">WALI KELAS</p>
+                        <p className="font-bold underline decoration-1 underline-offset-2">{waliInfo.teacher}</p>
+                        <p>NIP. {waliInfo.nip}</p>
                     </div>
                 </div>
                 
-                <div className="flex justify-center text-xs mt-8 font-serif">
+                <div className="flex justify-center text-[10px] mt-4 font-serif">
                     <div className="text-center">
-                        <p className="mb-16">KEPALA SEKOLAH</p>
+                        <p className="mb-12">KEPALA SEKOLAH</p>
                         <p className="font-bold underline decoration-1 underline-offset-2">DIDIK SULISTYO, M.M.Pd</p>
                         <p>NIP. 19660518198901 1 002</p>
                     </div>
@@ -493,8 +590,11 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                         value={dbSemester}
                         onChange={(e) => setDbSemester(Number(e.target.value))}
                     >
-                        <option value={1}>Semester 1 (Ganjil)</option>
-                        <option value={2}>Semester 2 (Genap)</option>
+                        {[1, 2, 3, 4, 5, 6].map(sem => (
+                            <option key={sem} value={sem}>
+                                Semester {sem} ({sem % 2 !== 0 ? 'Ganjil' : 'Genap'} - Kls {sem <= 2 ? 'VII' : sem <= 4 ? 'VIII' : 'IX'})
+                            </option>
+                        ))}
                     </select>
                 </div>
 
@@ -528,8 +628,16 @@ const GradesView: React.FC<GradesViewProps> = ({ students, userRole = 'ADMIN' })
                     <ArrowLeft className="w-4 h-4" /> Kembali
                 </button>
                 <div className="flex gap-2">
+                    <button 
+                        onClick={handleDownloadF4} 
+                        disabled={isGeneratingPdf}
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-bold hover:bg-orange-700 shadow-sm disabled:opacity-50 disabled:cursor-wait"
+                    >
+                        {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                        Download PDF (F4)
+                    </button>
                     <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm" onClick={() => window.print()}>
-                        <Printer className="w-4 h-4" /> Cetak / PDF
+                        <Printer className="w-4 h-4" /> Cetak
                     </button>
                 </div>
             </div>

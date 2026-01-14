@@ -27,16 +27,15 @@ const BukuIndukView: React.FC<BukuIndukViewProps> = ({ students }) => {
         const element = document.getElementById('buku-induk-content');
         const filename = `Buku_Induk_${selectedStudent.fullName.replace(/\s+/g, '_')}.pdf`;
 
+        // Optimasi margin dan ukuran agar tidak terpotong (A4 Width 210mm - Margin Kiri/Kanan 10mm = Max Content 190mm)
         const opt = {
-          margin: [2, 2, 2, 2], // Margin minimal, andalkan padding CSS
+          margin: [5, 10, 5, 10], // Top, Left, Bottom, Right (mm)
           filename: filename,
-          image: { type: 'jpeg', quality: 0.98 }, // High quality image
+          image: { type: 'jpeg', quality: 0.98 },
           html2canvas: { 
-            scale: 2, // High resolution to prevent blur
+            scale: 2, 
             useCORS: true, 
-            logging: false,
-            letterRendering: true,
-            windowWidth: 794
+            scrollY: 0
           },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
@@ -104,8 +103,8 @@ const BukuIndukView: React.FC<BukuIndukViewProps> = ({ students }) => {
               <div className="bg-white p-4 md:p-8 rounded-xl border border-gray-200 shadow-sm flex-1 overflow-auto flex justify-center bg-gray-50/50">
                   
                   {/* === DOCUMENT CONTENT === */}
-                  {/* Reduced padding and font size for single page fit */}
-                  <div id="buku-induk-content" className="w-[210mm] bg-white p-5 flex flex-col font-serif shadow-xl text-[9px] leading-tight">
+                  {/* Reduced width to 190mm to ensure proper margins in A4 PDF (210mm) */}
+                  <div id="buku-induk-content" className="w-[190mm] bg-white p-5 flex flex-col font-serif shadow-xl text-[9px] leading-tight box-border relative">
                       
                       {/* HEADER */}
                       <div className="border-2 border-black p-0.5 mb-1 bg-black">
